@@ -25,7 +25,7 @@ type InMemoryRepository struct {
 }
 
 func makeKey(name, version string) string {
-	return fmt.Sprintf("%s#%s", name, version)
+	return fmt.Sprintf("%s-%s", name, version)
 }
 
 func NewInMemoryRepository() *InMemoryRepository {

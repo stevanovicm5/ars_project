@@ -21,7 +21,7 @@ func TestConfigCRUD(t *testing.T) {
 
 	name := "ServiceA"
 	version := "v1.0.0"
-	key := name + "#" + version
+	key := makeKey(name, version)
 
 	testConfig := model.Configuration{
 		ID:      uuid.New(),
@@ -40,7 +40,7 @@ func TestConfigCRUD(t *testing.T) {
 		}
 	})
 
-	// 2. CREATE (Duplikat)
+	// 1. CREATE (Duplikat)
 	t.Run("AddDuplicateConfiguration", func(t *testing.T) {
 		err := repo.AddConfiguration(testConfig)
 		if err == nil || !strings.Contains(err.Error(), "already exists") {
@@ -48,7 +48,7 @@ func TestConfigCRUD(t *testing.T) {
 		}
 	})
 
-	// 3. READ (Get - uspešno)
+	// 2. READ (Get - uspešno)
 	t.Run("GetConfiguration_Success", func(t *testing.T) {
 		fetchedConfig, err := repo.GetConfiguration(name, version)
 		if err != nil {
@@ -59,7 +59,7 @@ func TestConfigCRUD(t *testing.T) {
 		}
 	})
 
-	// 4. UPDATE (Put)
+	// 3. UPDATE (Put)
 	t.Run("UpdateConfiguration_Success", func(t *testing.T) {
 		updatedConfig := testConfig
 		updatedConfig.Params = []model.Parameter{{Key: "timeout", Value: "20s"}}
@@ -74,7 +74,7 @@ func TestConfigCRUD(t *testing.T) {
 		}
 	})
 
-	// 5. DELETE (uspešno)
+	// 4. DELETE (uspešno)
 	t.Run("DeleteConfiguration_Success", func(t *testing.T) {
 		if err := repo.DeleteConfiguration(name, version); err != nil {
 			t.Fatalf("FAIL: DeleteConfiguration failed: %v", err)
@@ -86,7 +86,7 @@ func TestConfigCRUD(t *testing.T) {
 		}
 	})
 
-	// 6. DELETE (not found)
+	// 4. DELETE (not found)
 	t.Run("DeleteConfiguration_NotFound", func(t *testing.T) {
 		err := repo.DeleteConfiguration(name, version)
 		if err == nil || !strings.Contains(err.Error(), "not found") {
@@ -104,7 +104,7 @@ func TestGroupCRUD(t *testing.T) {
 
 	name := "WebServers"
 	version := "v2.0.0"
-	key := name + "#" + version
+	key := makeKey(name, version)
 
 	testGroup := model.ConfigurationGroup{
 		ID:      uuid.New(),
