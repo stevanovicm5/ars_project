@@ -192,3 +192,25 @@ func (r *ConsulRepository) DeleteConfigurationGroup(name, version string) error 
 
 	return nil
 }
+
+const IdempotencyPrefix = "idempotency/"
+
+func (r *ConsulRepository) CheckIdempotencyKey(key string) (bool, error) {
+	fullKey := IdempotencyPrefix + key
+	pair, _, err := r.Client.KV().Get(fullKey, nil)
+	if err != nil {
+		return false, fmt.Errorf("consul check failed: %w", err)
+	}
+	return pair != nil, nil
+}
+
+func (r *ConsulRepository) SaveIdempotencyKey(key string) error {
+	fullKey := IdempotencyPrefix + key
+	p := &api.KVPair{Key: fullKey, Value: []byte("processed")}
+
+	_, err := r.Client.KV().Put(p, nil)
+	if err != nil {
+		return fmt.Errorf("failed to save idempotency key to Consul: %w", err)
+	}
+	return nil
+}

@@ -12,10 +12,10 @@ import (
 )
 
 type ConfigHandler struct {
-	Repo repository.ConfigRepository
+	Repo repository.Repository
 }
 
-func NewConfigHandler(repo repository.ConfigRepository) *ConfigHandler {
+func NewConfigHandler(repo repository.Repository) *ConfigHandler {
 	return &ConfigHandler{
 		Repo: repo,
 	}
@@ -26,20 +26,16 @@ func NewConfigHandler(repo repository.ConfigRepository) *ConfigHandler {
 // ADD
 func (h *ConfigHandler) HandleAddConfiguration(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		// 1. Check HTTP Method
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// 2. Decode JSON body into our Request struct
 	var req model.CreateConfigurationRequest
-	//r.body je reader, dekodiramo json podatke u nasu req strukturu
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body"+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	//3 map request struct to full config model
 	newConfig := model.Configuration{
 		ID:      uuid.New(),
 		Name:    req.Name,
@@ -52,43 +48,43 @@ func (h *ConfigHandler) HandleAddConfiguration(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// IDEMPOTENCY SAVE
+	idempotencyKey := r.Header.Get("X-Request-Id")
+	if idempotencyKey != "" {
+		if err := h.Repo.SaveIdempotencyKey(idempotencyKey); err != nil {
+			log.Printf("IDEMPOTENCY WARNING: Failed to save key %s: %v", idempotencyKey, err)
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 }
 
 // GET
 func (h *ConfigHandler) HandleGetConfiguration(w http.ResponseWriter, r *http.Request) {
-	// 1. Provera HTTP Metoda (iako je ruter to već uradio, ovo je dobra praksa)
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// 2. Čitanje Query Parametara iz URL-a
-	// Tražimo /configurations?name=ServiceA&version=v1.0.0
 	name := r.URL.Query().Get("name")
 	version := r.URL.Query().Get("version")
 
-	// 3. Validacija ulaza
 	if name == "" || version == "" {
-		http.Error(w, "Query parameters 'name' and 'version' are required.", http.StatusBadRequest) // 400 Bad Request
+		http.Error(w, "Query parameters 'name' and 'version' are required.", http.StatusBadRequest)
 		return
 	}
 
-	// 4. Pozivanje Repozitorijuma za dobavljanje podataka
 	config, err := h.Repo.GetConfiguration(name, version)
 
 	if err != nil {
-		// Ako repozitorijum vrati grešku (npr. "configuration not found")
 		log.Printf("Error retrieving config %s/%s: %v", name, version, err)
-		http.Error(w, "Configuration not found.", http.StatusNotFound) // 404 Not Found
+		http.Error(w, "Configuration not found.", http.StatusNotFound)
 		return
 	}
 
-	// 5. Slanje uspešnog odgovora (200 OK)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	// Konvertujemo strukturu config nazad u JSON i pišemo u http.ResponseWriter
 	json.NewEncoder(w).Encode(config)
 }
 
@@ -122,6 +118,14 @@ func (h *ConfigHandler) HandleUpdateConfiguration(w http.ResponseWriter, r *http
 		}
 		http.Error(w, "Error updating configuration: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// IDEMPOTENCY SAVE
+	idempotencyKey := r.Header.Get("X-Request-Id")
+	if idempotencyKey != "" {
+		if err := h.Repo.SaveIdempotencyKey(idempotencyKey); err != nil {
+			log.Printf("IDEMPOTENCY WARNING: Failed to save key %s: %v", idempotencyKey, err)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -184,6 +188,14 @@ func (h *ConfigHandler) HandleAddConfigurationGroup(w http.ResponseWriter, r *ht
 	if err := h.Repo.AddConfigurationGroup(newGroup); err != nil {
 		http.Error(w, "Group creation failed: "+err.Error(), http.StatusConflict)
 		return
+	}
+
+	// IDEMPOTENCY SAVE
+	idempotencyKey := r.Header.Get("X-Request-Id")
+	if idempotencyKey != "" {
+		if err := h.Repo.SaveIdempotencyKey(idempotencyKey); err != nil {
+			log.Printf("IDEMPOTENCY WARNING: Failed to save key %s: %v", idempotencyKey, err)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -252,6 +264,14 @@ func (h *ConfigHandler) HandleUpdateConfigurationGroup(w http.ResponseWriter, r 
 		}
 		http.Error(w, "Error updating configuration group: "+err.Error(), http.StatusInternalServerError) // 500
 		return
+	}
+
+	// IDEMPOTENCY SAVE
+	idempotencyKey := r.Header.Get("X-Request-Id")
+	if idempotencyKey != "" {
+		if err := h.Repo.SaveIdempotencyKey(idempotencyKey); err != nil {
+			log.Printf("IDEMPOTENCY WARNING: Failed to save key %s: %v", idempotencyKey, err)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

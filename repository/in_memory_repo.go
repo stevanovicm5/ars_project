@@ -6,22 +6,10 @@ import (
 	"fmt"
 )
 
-// Define interface for the repository to allow future switching
-type ConfigRepository interface {
-	AddConfiguration(config model.Configuration) error
-	GetConfiguration(name, version string) (model.Configuration, error)
-	DeleteConfiguration(name, version string) error
-	UpdateConfiguration(config model.Configuration) error
-
-	AddConfigurationGroup(model.ConfigurationGroup) error
-	GetConfigurationGroup(name, version string) (model.ConfigurationGroup, error)
-	DeleteConfigurationGroup(name, version string) error
-	UpdateConfigurationGroup(group model.ConfigurationGroup) error
-}
-
 type InMemoryRepository struct {
-	configs map[string]model.Configuration
-	groups  map[string]model.ConfigurationGroup
+	configs         map[string]model.Configuration
+	groups          map[string]model.ConfigurationGroup
+	idempotencyKeys map[string]struct{}
 }
 
 func makeKey(name, version string) string {
@@ -30,8 +18,9 @@ func makeKey(name, version string) string {
 
 func NewInMemoryRepository() *InMemoryRepository {
 	return &InMemoryRepository{
-		configs: make(map[string]model.Configuration),
-		groups:  make(map[string]model.ConfigurationGroup),
+		configs:         make(map[string]model.Configuration),
+		groups:          make(map[string]model.ConfigurationGroup),
+		idempotencyKeys: make(map[string]struct{}),
 	}
 }
 
@@ -123,5 +112,15 @@ func (r *InMemoryRepository) DeleteConfigurationGroup(name, version string) erro
 		return errors.New("config group not found for deletion")
 	}
 	delete(r.groups, key)
+	return nil
+}
+
+func (r *InMemoryRepository) CheckIdempotencyKey(key string) (bool, error) {
+	_, exists := r.idempotencyKeys[key]
+	return exists, nil
+}
+
+func (r *InMemoryRepository) SaveIdempotencyKey(key string) error {
+	r.idempotencyKeys[key] = struct{}{}
 	return nil
 }
