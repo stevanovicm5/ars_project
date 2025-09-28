@@ -11,10 +11,12 @@ type ConfigRepository interface {
 	AddConfiguration(config model.Configuration) error
 	GetConfiguration(name, version string) (model.Configuration, error)
 	DeleteConfiguration(name, version string) error
+	UpdateConfiguration(config model.Configuration) error
 
 	AddConfigurationGroup(model.ConfigurationGroup) error
 	GetConfigurationGroup(name, version string) (model.ConfigurationGroup, error)
 	DeleteConfigurationGroup(name, version string) error
+	UpdateConfigurationGroup(group model.ConfigurationGroup) error
 }
 
 type InMemoryRepository struct {
@@ -33,6 +35,9 @@ func NewInMemoryRepository() *InMemoryRepository {
 	}
 }
 
+// CONFIGURATIONS
+
+// ADD
 func (r *InMemoryRepository) AddConfiguration(config model.Configuration) error {
 	key := makeKey(config.Name, config.Version)
 
@@ -43,15 +48,30 @@ func (r *InMemoryRepository) AddConfiguration(config model.Configuration) error 
 	return nil
 }
 
+// GET
 func (r *InMemoryRepository) GetConfiguration(name, version string) (model.Configuration, error) {
 	key := makeKey(name, version)
 	config, exists := r.configs[key]
 	if !exists {
-		return model.Configuration{}, errors.New("configuration not found")
+		return model.Configuration{}, errors.New("configuration not found for get")
 	}
 	return config, nil
 }
 
+// UPDATE
+func (r *InMemoryRepository) UpdateConfiguration(config model.Configuration) error {
+	key := makeKey(config.Name, config.Version)
+
+	if _, exists := r.configs[key]; !exists {
+		return errors.New("configuration not found for update")
+	}
+
+	r.configs[key] = config
+
+	return nil
+}
+
+// DELETE
 func (r *InMemoryRepository) DeleteConfiguration(name, version string) error {
 	key := makeKey(name, version)
 	if _, exists := r.configs[key]; !exists {
@@ -61,6 +81,9 @@ func (r *InMemoryRepository) DeleteConfiguration(name, version string) error {
 	return nil
 }
 
+// CONFIGURATION GROUPS
+
+// ADD
 func (r *InMemoryRepository) AddConfigurationGroup(group model.ConfigurationGroup) error {
 	key := makeKey(group.Name, group.Version)
 	if _, exists := r.groups[key]; exists {
@@ -70,6 +93,7 @@ func (r *InMemoryRepository) AddConfigurationGroup(group model.ConfigurationGrou
 	return nil
 }
 
+// GET
 func (r *InMemoryRepository) GetConfigurationGroup(name, version string) (model.ConfigurationGroup, error) {
 	key := makeKey(name, version)
 	group, exists := r.groups[key]
@@ -79,6 +103,20 @@ func (r *InMemoryRepository) GetConfigurationGroup(name, version string) (model.
 	return group, nil
 }
 
+// UPDATE
+func (r *InMemoryRepository) UpdateConfigurationGroup(group model.ConfigurationGroup) error {
+	key := makeKey(group.Name, group.Version)
+
+	if _, exists := r.groups[key]; !exists {
+		return errors.New("config group not found for update")
+	}
+
+	r.groups[key] = group
+
+	return nil
+}
+
+// DELETE
 func (r *InMemoryRepository) DeleteConfigurationGroup(name, version string) error {
 	key := makeKey(name, version)
 	if _, exists := r.groups[key]; !exists {
