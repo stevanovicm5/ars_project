@@ -1,0 +1,59 @@
+# Git
+.git
+.gitignore
+README.md
+
+# Docker files
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.*.yml
+
+# Go binaries and build artifacts
+bin/
+dist/
+main
+app
+*.exe
+
+# Dependency directories
+vendor/
+
+# Documentation
+*.md
+*.txt
+
+# Log files
+*.log
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Test files
+*_test.go
+coverage.txt
+coverage.out
+
+# Environment files
+.env
+.env.local
+
+# Go module files (if not using vendor)
+pkg/
+
+# Temporary files
+tmp/
+temp/
+
+# Source code (optional - only if you copy source in Dockerfile)
+# *.go
+# go.mod
+# go.sum

@@ -1,0 +1,67 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Binary output
+/bin/
+/dist/
+/target/
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Log files
+*.log
+
+# Test coverage files
+coverage.txt
+coverage.out
+*.cover
+
+# Go module files (if not using go modules)
+/pkg/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Build artifacts
+/main
+/app
+
+# Swagger generated docs (optional - include if you want to generate on build)
+/docs/swagger.json
+/docs/docs.go
+/docs/swagger.yaml
+
+# Docker compose override files
+docker-compose.override.yml
+
+# Temporary files
+tmp/
+temp/

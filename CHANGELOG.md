@@ -31,3 +31,37 @@ Ključne promene:
 1. Ažuriran IdempotencyMiddleware: Uklonjena je logika za 'SaveIdempotencyKey()' koja se izvršavala neselektivno NAKON što se Handler izvrši. Middleware je sada isključivo zadužen za 'Check' i 'Block'.
 2. Migracija logike snimanja: Logika 'app.Repo.SaveIdempotencyKey(key)' je premeštena u sva 4 Handler-a (Add/Update za Konfiguracije/Grupe). Ključ se sada čuva u Consulu ISKLJUČIVO ako je repozitorijumska operacija bila uspešna (bez 400 ili 409 grešaka).
 3. Ispravljen ConfigHandler: Ažurirana zavisnost da koristi ispravan interfejs 'repository.Repository'.
+
+---- 29. Septembar 2025 ----
+Ognjen B
+Opis:
+Kompletna Dockerizacija i API Dokumentacija
+Ova faza je fokusirana na pripremu aplikacije za produkciju kroz kompletnu Dockerizaciju i Swagger dokumentaciju, čime je projekat spreman za inicijalan deployment.
+
+Ključne Implementacije:
+1. Swagger API Dokumentacija:
+Implementiran kompletan Swagger UI sa detaljnom dokumentacijom svih API endpointa
+Generisane automatske OpenAPI specifikacije za sve CRUD operacije
+Dokumentovani svi handleri sa odgovarajućim annotation komentarima
+Omogućen pristup Swagger interfejsu na /swagger/index.html
+
+2. Docker Konfiguracija:
+Kreiran optimizovan Dockerfile sa multi-stage build procesom
+Implementiran .dockerignore za efikasnije buildovanje
+Konfigurisan docker-compose.yaml za pokretanje kompletnog sistema
+Omogućena komunikacija između aplikacije i Consul servisa
+
+3. Strukturna Organizacija:
+Premešten main.go u root direktorijum projekta za bolju strukturu
+Ažuriran go.mod sa svim potrebnim dependency-ima
+Kreiran .gitignore sa optimalnim podešavanjima za Go i Docker projekte
+
+4. Kontejnerizacija Servisa:
+Docker Compose konfigurisan sa dva servisa: app i consul
+Omogućena mrežna komunikacija između kontejnera
+Konfigurisani portovi: 8080 za aplikaciju, 8500 za Consul UI
+
+5. Ažuriranje Dokumentacije:
+Kompletan README.md sa uputstvima za pokretanje
+Detaljne instrukcije za build i deployment
+MIT licenca
