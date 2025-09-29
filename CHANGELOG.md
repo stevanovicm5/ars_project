@@ -99,3 +99,59 @@ Aktivirane Metrike: Otklonili smo greške u Go kodu (services/metrics_service.go
 Rešen Konflikt Rutiranja: Eliminacijom duplih registracija i izolacijom rute /metrics u main.go, uklonili smo konflikt sa Idempotency Middleware-om. Ovo je bila ključna promena koja je omogućila prometheus hendleru da radi bez smetnji.
 
 Vizualizacija u Grafani: Povezali smo Grafanu sa Prometheusom, što Vam omogućava da prate (vizualizujete) u realnom vremenu stopu poziva (rate(app_http_requests_total[1m])) i druge metrike.
+
+---- 29. Septembar 2025 ----
+Milan S
+Opis:
+Proširenje Funkcionalnosti i Poboljšanje API-ja
+Ova faza je fokusirana na dodavanje naprednih funkcionalnosti i poboljšanje developer experience-a kroz kompletno dokumentovanje.
+
+Ključne Implementacije:
+1. Proširenje Modela sa Labelima:
+Dodati labeli u Configuration model
+Labeli kao metadata za kategorizaciju i filtriranje konfiguracija
+Key-value struktura za fleksibilno označavanje
+
+2. Napredne Query Operacije:
+GET po labelima - Filtriranje konfiguracija prema label kriterijumima
+DELETE po labelima - Brisanje konfiguracija na osnovu labela
+Fleksibilni query parametri za kompleksno filtriranje
+
+3. Helper Metode za Label Operacije:
+Label-based pretrage u repository sloju
+Validacija label strukture
+Efikasno filtriranje u Consul KV store-u
+
+4. Kompletna Swagger Dokumentacija:
+Detaljni OpenAPI opisi za sve endpointove
+Primeri request/response za sve operacije
+Model dokumentacija sa opisima svih polja
+Error response dokumentacija sa HTTP status kodovima
+
+---- 29. Septembar 2025 ----
+Ognjen B
+Opis:
+Refaktor Middleware Arhitekture i Implementacija Rate Limitinga
+Ova faza je fokusirana na poboljšanje arhitekture i dodavanje zaštitnih mehanizama za API.
+
+Ključne Promene:
+1. Restruktuiranje Middleware Sloja:
+Izdvojen IdempotencyMiddleware iz main.go u zaseban fajl middleware/idempotency.go
+Kreiran modularan middleware paket sa jasno definisanim responsibilitijem
+Poboljšana testabilnost - svaki middleware može se testirati nezavisno
+
+2. Implementacija Rate Limitinga:
+Dodat RateLimiter middleware u middleware/ratelimit.go
+Konfigurisano ograničenje: 100 zahteva po minuti po IP adresi
+Standardni HTTP headeri: X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset
+HTTP 429 status za prekoračenje limita
+
+3. Poboljšana Bezbednost i Stabilnost:
+Dodati nil checkovi za sprečavanje panic grešaka
+Detaljnije logovanje za debugging i monitoring
+Graceful error handling u svim middleware komponentama
+
+4. Ažurirana Docker Konfiguracija:
+Middleware fajlovi uključeni u Docker build
+Automatsko testiranje rate limitinga pri pokretanju
+Poboljšani health checkovi sa statusom limita
