@@ -1,7 +1,9 @@
+version: '3.8'
+
 services:
   app:
     build: .
-    container_name: app
+    container_name: ars_config_service
     hostname: app
     ports:
       - 8080:8080
@@ -14,7 +16,7 @@ services:
 
   consul:
     image: consul:1.15.4
-    container_name: consul
+    container_name: ars_consul 
     ports:
       - "8500:8500"
     command: "agent -server -data-dir=/consul/data -bootstrap=true -ui -client=0.0.0.0"
@@ -22,10 +24,40 @@ services:
       - consul-data:/consul/data
     networks:
       - network
+      
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: ars_prometheus
+    ports:
+      - "9090:9090" 
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    depends_on:
+      - app 
+    networks:
+      - network 
+
+  grafana:
+    image: grafana/grafana:10.2.3
+    container_name: ars_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes: 
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - network
 
 volumes:
   consul-data:
-
+  grafana-data:
+  
 networks:
   network:
     driver: bridge

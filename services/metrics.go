@@ -4,33 +4,32 @@ import (
 	"alati_projekat/model"
 	"time"
 
-	kitmetrics "github.com/go-kit/kit/metrics"
-	"github.com/go-kit/kit/metrics/prometheus"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 )
 
 type MetricsService struct {
 	Next           Service
-	RequestCount   kitmetrics.Counter
-	RequestLatency kitmetrics.Histogram
+	RequestCount   *stdprometheus.CounterVec
+	RequestLatency *stdprometheus.HistogramVec
 }
 
 func NewMetricsService(next Service) *MetricsService {
-	// Counter
-	requestCount := prometheus.NewCounterFrom(stdprometheus.CounterOpts{
+	requestCount := stdprometheus.NewCounterVec(stdprometheus.CounterOpts{
 		Namespace: "config_service",
 		Subsystem: "configuration_service",
-		Name:      "request_count",
+		Name:      "request_count_total",
 		Help:      "Number of requests received.",
 	}, []string{"method"})
 
-	// Histogram
-	requestLatency := prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
+	requestLatency := stdprometheus.NewHistogramVec(stdprometheus.HistogramOpts{
 		Namespace: "config_service",
 		Subsystem: "configuration_service",
 		Name:      "request_latency_seconds",
 		Help:      "Total duration of requests in seconds.",
 	}, []string{"method"})
+
+	stdprometheus.MustRegister(requestCount)
+	stdprometheus.MustRegister(requestLatency)
 
 	return &MetricsService{
 		Next:           next,
@@ -39,13 +38,11 @@ func NewMetricsService(next Service) *MetricsService {
 	}
 }
 
-// Generalna defer funkcija za merenje i brojanje
 func (s *MetricsService) measure(method string, start time.Time) {
-	s.RequestCount.With("method", method).Add(1)
-	s.RequestLatency.With("method", method).Observe(time.Since(start).Seconds())
+	s.RequestCount.WithLabelValues(method).Inc()
+	s.RequestLatency.WithLabelValues(method).Observe(time.Since(start).Seconds())
 }
 
-// Konfiguracije
 func (s *MetricsService) AddConfiguration(config model.Configuration, idempotencyKey string) (err error) {
 	defer s.measure("AddConfiguration", time.Now())
 	return s.Next.AddConfiguration(config, idempotencyKey)
@@ -66,7 +63,6 @@ func (s *MetricsService) DeleteConfiguration(name string, version string) (err e
 	return s.Next.DeleteConfiguration(name, version)
 }
 
-// Grupe Konfiguracija
 func (s *MetricsService) AddConfigurationGroup(group model.ConfigurationGroup, idempotencyKey string) (err error) {
 	defer s.measure("AddConfigurationGroup", time.Now())
 	return s.Next.AddConfigurationGroup(group, idempotencyKey)
@@ -87,7 +83,6 @@ func (s *MetricsService) DeleteConfigurationGroup(name string, version string) (
 	return s.Next.DeleteConfigurationGroup(name, version)
 }
 
-// Idempotentnost
 func (s *MetricsService) CheckIdempotencyKey(key string) (bool, error) {
 	return s.Next.CheckIdempotencyKey(key)
 }

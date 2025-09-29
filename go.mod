@@ -9,6 +9,8 @@ require (
 	github.com/swaggo/http-swagger v1.3.4
 )
 
+require github.com/miekg/dns v1.1.43 // indirect
+
 require (
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect

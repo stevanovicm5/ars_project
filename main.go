@@ -39,11 +39,12 @@ type application struct {
 // @host  localhost:8080
 // @BasePath /
 func main() {
-	consulAddr := "http://127.0.0.1:8500"
+	consulAddr := "http://consul:8500"
 
-	if os.Getenv("CONSUL_ADDR") != "" {
-		consulAddr = os.Getenv("CONSUL_ADDR")
+	if os.Getenv("CONSUL_HTTP_ADDR") != "" {
+		consulAddr = os.Getenv("CONSUL_HTTP_ADDR")
 	}
+	http.Handle("/metrics", promhttp.Handler())
 
 	repo, err := repository.NewConsulRepository(consulAddr)
 
@@ -53,7 +54,6 @@ func main() {
 	log.Printf("Successfully connected to Consul at %s", consulAddr)
 
 	baseService := services.NewConfigurationService(repo)
-
 	configService := services.NewMetricsService(baseService)
 
 	app := &application{

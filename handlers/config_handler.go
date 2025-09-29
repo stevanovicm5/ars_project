@@ -375,7 +375,6 @@ func (h *ConfigHandler) HandleDeleteConfigurationGroup(w http.ResponseWriter, r 
 		return
 	}
 
-	// IZMENA: Pozivamo Servis
 	err := h.Service.DeleteConfigurationGroup(name, version)
 
 	if err != nil {

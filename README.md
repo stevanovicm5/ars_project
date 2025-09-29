@@ -39,3 +39,6 @@ docker-compose up --build
 [Consul](http://localhost:8500)
 
 [Swagger](http://localhost:8080/swagger/index.html)
+
+[Grafanu ](http://localhost:3000 )(username: admin | password: admin)
+[Prometheus](http://localhost:9090)
