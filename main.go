@@ -2,12 +2,14 @@ package main
 
 import (
 	"alati_projekat/handlers"
+	"alati_projekat/middleware"
 	"alati_projekat/model"
 	"alati_projekat/repository"
 	"alati_projekat/services"
 	"context"
 	"log"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/signal"
 	"syscall"
@@ -100,47 +102,13 @@ func main() {
 	log.Printf("Swagger UI available at http://localhost%s/swagger/index.html", port)
 	log.Printf("Prometheus metrics available at http://localhost%s/metrics", port)
 
+	app.testRateLimiting()
+
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Server failed to start: %v", err)
 	}
 
 	log.Println("Server exited gracefully.")
-}
-
-// IdempotencyMiddleware
-func (app *application) IdempotencyMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		if r.Method != http.MethodPost && r.Method != http.MethodPut {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		idempotencyKey := r.Header.Get("X-Request-Id")
-
-		if idempotencyKey == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("Error: X-Request-Id header (UUID) is necessary."))
-			return
-		}
-
-		isProcessed, err := app.Services.CheckIdempotencyKey(idempotencyKey)
-		if err != nil {
-			log.Printf("IDEMPOTENCY ERROR: Consul check failed: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		if isProcessed {
-			log.Printf("IDEMPOTENCY HIT: Request with key %s already processed.", idempotencyKey)
-			w.WriteHeader(http.StatusCreated)
-			w.Write([]byte("Request already processed (Idempotent)."))
-			return
-		}
-
-		log.Printf("IDEMPOTENCY MISS: Processing new request with key %s.", idempotencyKey)
-		next.ServeHTTP(w, r)
-	})
 }
 
 func setupRouter(app *application) *mux.Router {
@@ -156,8 +124,12 @@ func setupRouter(app *application) *mux.Router {
 	configHandler := handlers.NewConfigHandler(app.Services)
 
 	// 4. KREIRAJTE POSEBNU RUTU SA MIDDLEWARE-OM ZA SVE OSTALO
+	rateLimiter := middleware.NewRateLimiter(100, time.Minute)
+	idempotencyMiddleware := middleware.NewIdempotencyMiddleware(app.Services)
+
 	apiRouter := router.PathPrefix("/").Subrouter()
-	apiRouter.Use(app.IdempotencyMiddleware)
+	apiRouter.Use(rateLimiter.Middleware)
+	apiRouter.Use(idempotencyMiddleware.Middleware)
 
 	// Swagger
 	staticSwaggerFiles := http.FileServer(http.Dir("./docs"))
@@ -200,4 +172,54 @@ func (app *application) handleHealthCheck(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status": "healthy", "service": "configuration-service"}`))
+}
+
+func (app *application) testRateLimiting() {
+	log.Println("Testing rate limiting...")
+
+	testLimiter := middleware.NewRateLimiter(3, time.Minute)
+
+	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OK"))
+	})
+
+	handler := testLimiter.Middleware(testHandler)
+
+	testIP := "192.168.1.100"
+
+	// Test 1: First 3 requests should succeed
+	successCount := 0
+	for i := 1; i <= 3; i++ {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.RemoteAddr = testIP + ":8080"
+		rr := httptest.NewRecorder()
+
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code == http.StatusOK {
+			successCount++
+			log.Printf("Request %d: SUCCESS (Remaining: %s)", i, rr.Header().Get("X-RateLimit-Remaining"))
+		} else {
+			log.Printf("Request %d: FAILED - Expected 200, got %d", i, rr.Code)
+		}
+	}
+
+	// Test 2: Fourth request should be rate limited
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.RemoteAddr = testIP + ":8080"
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code == http.StatusTooManyRequests {
+		log.Printf("Request 4: CORRECTLY RATE LIMITED (429)")
+		log.Printf("Headers: Limit=%s, Remaining=%s, Reset=%s",
+			rr.Header().Get("X-RateLimit-Limit"),
+			rr.Header().Get("X-RateLimit-Remaining"),
+			rr.Header().Get("X-RateLimit-Reset"))
+	} else {
+		log.Printf("Request 4: FAILED - Expected 429, got %d", rr.Code)
+	}
+
+	log.Println("Rate limiting test completed")
 }
