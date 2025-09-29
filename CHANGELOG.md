@@ -89,3 +89,13 @@ Ključne Implementacije:
 
 5. Ažuriranje Handlera:
 - `handlers.NewConfigHandler` sada prima `services.Service` **interfejs**, čime je rešena zavisnost od konkretne implementacije.
+
+Uspešno smo integrisali i otklonili sve probleme kako bi Vaš sistem pouzdano prikupljao i vizualizovao performanse.
+
+Potvrđena Infrastruktura: Dokazali smo da Docker, Prometheus i Grafana rade i vide se međusobno. Prometheus sada pouzdano čita podatke sa http://app:8080/metrics.
+
+Aktivirane Metrike: Otklonili smo greške u Go kodu (services/metrics_service.go), čime smo osigurali da se brojač app_http_requests_total zaista povećava sa svakim pozivom (npr., AddConfigurationGroup).
+
+Rešen Konflikt Rutiranja: Eliminacijom duplih registracija i izolacijom rute /metrics u main.go, uklonili smo konflikt sa Idempotency Middleware-om. Ovo je bila ključna promena koja je omogućila prometheus hendleru da radi bez smetnji.
+
+Vizualizacija u Grafani: Povezali smo Grafanu sa Prometheusom, što Vam omogućava da prate (vizualizujete) u realnom vremenu stopu poziva (rate(app_http_requests_total[1m])) i druge metrike.

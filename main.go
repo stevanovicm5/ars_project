@@ -44,7 +44,6 @@ func main() {
 	if os.Getenv("CONSUL_HTTP_ADDR") != "" {
 		consulAddr = os.Getenv("CONSUL_HTTP_ADDR")
 	}
-	http.Handle("/metrics", promhttp.Handler())
 
 	repo, err := repository.NewConsulRepository(consulAddr)
 
@@ -144,38 +143,42 @@ func (app *application) IdempotencyMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// setupRouter
 func setupRouter(app *application) *mux.Router {
 	router := mux.NewRouter()
 
-	router.Use(app.IdempotencyMiddleware)
+	// 1. METRICS ENDPOINT - BEZ MIDDLEWARE-A
+	router.Handle("/metrics", promhttp.Handler()).Methods("GET")
 
+	// 2. HEALTH CHECK - takođe bez middleware-a
+	router.HandleFunc("/health", app.handleHealthCheck).Methods("GET")
+
+	// 3. KREIRAJTE configHandler OVDE
+	configHandler := handlers.NewConfigHandler(app.Services)
+
+	// 4. KREIRAJTE POSEBNU RUTU SA MIDDLEWARE-OM ZA SVE OSTALO
+	apiRouter := router.PathPrefix("/").Subrouter()
+	apiRouter.Use(app.IdempotencyMiddleware)
+
+	// Swagger
 	staticSwaggerFiles := http.FileServer(http.Dir("./docs"))
-	router.PathPrefix("/swagger/static/").Handler(http.StripPrefix("/swagger/static/", staticSwaggerFiles))
-
-	router.PathPrefix("/swagger/").Handler(httpSwagger.Handler(
+	apiRouter.PathPrefix("/swagger/static/").Handler(http.StripPrefix("/swagger/static/", staticSwaggerFiles))
+	apiRouter.PathPrefix("/swagger/").Handler(httpSwagger.Handler(
 		httpSwagger.URL("/swagger/static/swagger.json"),
 	)).Methods("GET")
 
-	router.Handle("/metrics", promhttp.Handler()).Methods("GET")
-
-	configHandler := handlers.NewConfigHandler(app.Services)
-
-	// configuration routes
-	configRouter := router.PathPrefix("/configurations").Subrouter()
+	// Configuration routes
+	configRouter := apiRouter.PathPrefix("/configurations").Subrouter()
 	configRouter.HandleFunc("", configHandler.HandleAddConfiguration).Methods("POST")
 	configRouter.HandleFunc("", configHandler.HandleGetConfiguration).Methods("GET")
 	configRouter.HandleFunc("", configHandler.HandleUpdateConfiguration).Methods("PUT")
 	configRouter.HandleFunc("", configHandler.HandleDeleteConfiguration).Methods("DELETE")
 
-	// configgroup routes
-	groupRouter := router.PathPrefix("/configgroups").Subrouter()
+	// Config group routes
+	groupRouter := apiRouter.PathPrefix("/configgroups").Subrouter()
 	groupRouter.HandleFunc("", configHandler.HandleAddConfigurationGroup).Methods("POST")
 	groupRouter.HandleFunc("", configHandler.HandleGetConfigurationGroup).Methods("GET")
 	groupRouter.HandleFunc("", configHandler.HandleUpdateConfigurationGroup).Methods("PUT")
 	groupRouter.HandleFunc("", configHandler.HandleDeleteConfigurationGroup).Methods("DELETE")
-
-	router.HandleFunc("/health", app.handleHealthCheck).Methods("GET")
 
 	return router
 }

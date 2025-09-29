@@ -14,10 +14,11 @@ type MetricsService struct {
 }
 
 func NewMetricsService(next Service) *MetricsService {
+	// Counter
 	requestCount := stdprometheus.NewCounterVec(stdprometheus.CounterOpts{
-		Namespace: "config_service",
-		Subsystem: "configuration_service",
-		Name:      "request_count_total",
+		Namespace: "app",            // SKRAĆENO
+		Subsystem: "http",           // SKRAĆENO
+		Name:      "requests_total", // SKRAĆENO
 		Help:      "Number of requests received.",
 	}, []string{"method"})
 

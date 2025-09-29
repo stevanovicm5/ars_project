@@ -3,7 +3,6 @@ module alati_projekat
 go 1.25.1
 
 require (
-	github.com/go-kit/kit v0.13.0
 	github.com/hashicorp/consul/api v1.32.4
 	github.com/prometheus/client_golang v1.23.2
 	github.com/swaggo/http-swagger v1.3.4
