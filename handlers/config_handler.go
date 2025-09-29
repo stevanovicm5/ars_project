@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"alati_projekat/labels"
 	"alati_projekat/model"
 	"alati_projekat/services"
 	"encoding/json"
@@ -54,6 +55,7 @@ func (h *ConfigHandler) HandleAddConfiguration(w http.ResponseWriter, r *http.Re
 		Name:    req.Name,
 		Version: req.Version,
 		Params:  req.Params,
+		Labels:  req.Labels,
 	}
 
 	idempotencyKey := r.Header.Get("X-Request-Id")
@@ -141,6 +143,7 @@ func (h *ConfigHandler) HandleUpdateConfiguration(w http.ResponseWriter, r *http
 		Name:    req.Name,
 		Version: req.Version,
 		Params:  req.Params,
+		Labels:  req.Labels,
 	}
 
 	idempotencyKey := r.Header.Get("X-Request-Id")
@@ -388,4 +391,114 @@ func (h *ConfigHandler) HandleDeleteConfigurationGroup(w http.ResponseWriter, r 
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleGetGroupConfigsByLabels godoc
+//
+// @Summary     List configurations in a group by labels
+// @Description Return configurations inside a group that match ALL provided labels (format: "k:v;k2:v2")
+// @Tags        configgroups
+// @Accept      json
+// @Produce     json
+// @Param       name     query  string true  "Configuration group name"
+// @Param       version  query  string true  "Configuration group version"
+// @Param       labels   query  string false "Label filter: k:v;k2:v2 (all must match)"
+// @Success     200 {array}  model.Configuration
+// @Failure     400 {string} string "Bad Request - Name, version or labels invalid"
+// @Failure     404 {string} string "Configuration group not found"
+// @Failure     500 {string} string "Internal Server Error"
+// @Router      /configgroups/configurations [get]
+func (h *ConfigHandler) HandleGetGroupConfigsByLabels(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	name := r.URL.Query().Get("name")
+	version := r.URL.Query().Get("version")
+	labelsRaw := r.URL.Query().Get("labels")
+
+	if name == "" || version == "" {
+		http.Error(w, "Query parameters 'name' and 'version' are required.", http.StatusBadRequest)
+		return
+	}
+
+	want, err := labels.Parse(labelsRaw)
+	if err != nil {
+		http.Error(w, "Invalid 'labels' query: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	list, err := h.Service.FilterConfigsByLabels(name, version, want)
+	if err != nil {
+		// dosledno tvom stilu: ako sadrži "not found" → 404, inače 500
+		if strings.Contains(err.Error(), "not found") {
+			http.Error(w, "Configuration Group not found.", http.StatusNotFound)
+			return
+		}
+		log.Printf("Error filtering configs by labels for %s/%s: %v", name, version, err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(list)
+}
+
+// HandleDeleteGroupConfigsByLabels godoc
+//
+// @Summary     Delete configurations in a group by labels
+// @Description Delete all configurations inside a group that match ALL provided labels (format: "k:v;k2:v2")
+// @Tags        configgroups
+// @Accept      json
+// @Produce     json
+// @Param       name     query  string true  "Configuration group name"
+// @Param       version  query  string true  "Configuration group version"
+// @Param       labels   query  string true  "Label filter: k:v;k2:v2 (all must match)"
+// @Success     200 {object} map[string]int "deleted: <count>"
+// @Failure     400 {string} string "Bad Request - Name, version or labels invalid"
+// @Failure     404 {string} string "Configuration group not found"
+// @Failure     500 {string} string "Internal Server Error"
+// @Router      /configgroups/configurations [delete]
+func (h *ConfigHandler) HandleDeleteGroupConfigsByLabels(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	name := r.URL.Query().Get("name")
+	version := r.URL.Query().Get("version")
+	labelsRaw := r.URL.Query().Get("labels")
+
+	if name == "" || version == "" {
+		http.Error(w, "Query parameters 'name' and 'version' are required.", http.StatusBadRequest)
+		return
+	}
+	if labelsRaw == "" {
+		http.Error(w, "Query parameter 'labels' is required (format: k:v;k2:v2).", http.StatusBadRequest)
+		return
+	}
+
+	want, err := labels.Parse(labelsRaw)
+	if err != nil || len(want) == 0 {
+		http.Error(w, "Invalid 'labels' query: expected k:v;k2:v2", http.StatusBadRequest)
+		return
+	}
+
+	deleted, err := h.Service.DeleteConfigsByLabels(name, version, want)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			http.Error(w, "Configuration Group not found.", http.StatusNotFound)
+			return
+		}
+		log.Printf("Error deleting configs by labels for %s/%s: %v", name, version, err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	resp := map[string]int{"deleted": deleted}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(resp)
 }

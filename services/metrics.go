@@ -16,9 +16,9 @@ type MetricsService struct {
 func NewMetricsService(next Service) *MetricsService {
 	// Counter
 	requestCount := stdprometheus.NewCounterVec(stdprometheus.CounterOpts{
-		Namespace: "app",            // SKRAĆENO
-		Subsystem: "http",           // SKRAĆENO
-		Name:      "requests_total", // SKRAĆENO
+		Namespace: "app",            // SKRACENO
+		Subsystem: "http",           // SKRACENO
+		Name:      "requests_total", // SKRACENO
 		Help:      "Number of requests received.",
 	}, []string{"method"})
 
@@ -90,4 +90,13 @@ func (s *MetricsService) CheckIdempotencyKey(key string) (bool, error) {
 
 func (s *MetricsService) SaveIdempotencyKey(key string) {
 	s.Next.SaveIdempotencyKey(key)
+}
+func (s *MetricsService) FilterConfigsByLabels(name, version string, want map[string]string) (out []model.Configuration, err error) {
+	defer s.measure("FilterConfigsByLabels", time.Now())
+	return s.Next.FilterConfigsByLabels(name, version, want)
+}
+
+func (s *MetricsService) DeleteConfigsByLabels(name, version string, want map[string]string) (deleted int, err error) {
+	defer s.measure("DeleteConfigsByLabels", time.Now())
+	return s.Next.DeleteConfigsByLabels(name, version, want)
 }

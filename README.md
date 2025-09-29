@@ -40,5 +40,6 @@ docker-compose up --build
 
 [Swagger](http://localhost:8080/swagger/index.html)
 
-[Grafanu ](http://localhost:3000 )(username: admin | password: admin)
-[Prometheus](http://localhost:9090)
+[Grafanu](http://localhost:3000) (username: admin | password: admin ; connection:http://host.docker.internal:9090; query: "app_http_requests_total")
+
+[Prometheus](http://localhost:9090) (query: "app_http_requests_total")

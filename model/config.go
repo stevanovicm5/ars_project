@@ -24,6 +24,9 @@ type Configuration struct {
 	Version string `json:"version"`
 	//	@Description	List of configuration parameters
 	Params []Parameter `json:"params"`
+
+	//  @Description    List of config labels
+	Labels []Parameter `json:"labels,omitempty"`
 }
 
 // ConfigurationGroup represents a collection of configurations.
@@ -50,6 +53,9 @@ type CreateConfigurationRequest struct {
 	Version string `json:"version"`
 	//	@Description	List of configuration parameters
 	Params []Parameter `json:"params"`
+
+	// @Description Labels (k:v pairs)
+	Labels []Parameter `json:"labels"`
 }
 
 // CreateGroupRequest represents the request body for creating a configuration group.
@@ -62,4 +68,12 @@ type CreateGroupRequest struct {
 	Version string `json:"version"`
 	//	@Description	List of configurations to include in the group
 	Configurations []Configuration `json:"configurations"` // Using full config model for simplicity here
+}
+
+func (c Configuration) LabelsMap() map[string]string {
+	m := make(map[string]string, len(c.Labels))
+	for _, p := range c.Labels {
+		m[p.Key] = p.Value
+	}
+	return m
 }

@@ -180,6 +180,10 @@ func setupRouter(app *application) *mux.Router {
 	groupRouter.HandleFunc("", configHandler.HandleUpdateConfigurationGroup).Methods("PUT")
 	groupRouter.HandleFunc("", configHandler.HandleDeleteConfigurationGroup).Methods("DELETE")
 
+	//Config label routes
+	groupRouter.HandleFunc("/configurations", configHandler.HandleGetGroupConfigsByLabels).Methods("GET")
+	groupRouter.HandleFunc("/configurations", configHandler.HandleDeleteGroupConfigsByLabels).Methods("DELETE")
+
 	return router
 }
 

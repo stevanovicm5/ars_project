@@ -20,4 +20,8 @@ type Service interface {
 	// Idempotency
 	CheckIdempotencyKey(key string) (bool, error)
 	SaveIdempotencyKey(key string)
+
+	//Labels
+	FilterConfigsByLabels(name, version string, want map[string]string) ([]model.Configuration, error)
+	DeleteConfigsByLabels(name, version string, want map[string]string) (int, error)
 }

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"alati_projekat/labels"
 	"alati_projekat/model"
 	"alati_projekat/repository"
 	"log"
@@ -83,4 +84,43 @@ func (s *ConfigurationService) UpdateConfigurationGroup(group model.Configuratio
 
 func (s *ConfigurationService) DeleteConfigurationGroup(name string, version string) error {
 	return s.Repo.DeleteConfigurationGroup(name, version)
+}
+
+func (s *ConfigurationService) FilterConfigsByLabels(name, version string, want map[string]string) ([]model.Configuration, error) {
+	g, err := s.Repo.GetConfigurationGroup(name, version)
+	if err != nil {
+		return nil, err
+	}
+	var out []model.Configuration
+	for _, cfg := range g.Configurations {
+		if labels.HasAll(cfg, want) {
+			out = append(out, cfg)
+		}
+	}
+	return out, nil
+}
+
+func (s *ConfigurationService) DeleteConfigsByLabels(name, version string, want map[string]string) (int, error) {
+	g, err := s.Repo.GetConfigurationGroup(name, version)
+	if err != nil {
+		return 0, err
+	}
+	filtered := make([]model.Configuration, 0, len(g.Configurations))
+	deleted := 0
+	for _, cfg := range g.Configurations {
+		if labels.HasAll(cfg, want) {
+			deleted++
+			continue
+		}
+		filtered = append(filtered, cfg)
+	}
+	if deleted == 0 {
+		// nije greška – samo niko nije pogođen
+		return 0, nil
+	}
+	g.Configurations = filtered
+	if err := s.Repo.AddConfigurationGroup(g); err != nil {
+		return 0, err
+	}
+	return deleted, nil
 }
