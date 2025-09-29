@@ -65,3 +65,27 @@ Konfigurisani portovi: 8080 za aplikaciju, 8500 za Consul UI
 Kompletan README.md sa uputstvima za pokretanje
 Detaljne instrukcije za build i deployment
 MIT licenca
+
+---- 29. Septembar 2025 ----
+Ognjen K
+Opis:
+Uvođenje Servisnog Sloja i Metrika (Ocena 10)
+Ova faza kompletira prelazak na troslojnu arhitekturu (Handler -> Service -> Repository) i implementira praćenje performansi.
+
+Ključne Implementacije:
+1. Uvođenje Servisnog Sloja (`services/`):
+- Izdvojena sva poslovna logika (uključujući logiku Idempotentnosti) iz Handlera u novi `ConfigurationService`.
+- Svi Handleri sada komuniciraju isključivo sa Servisnim Slojem.
+
+2. Arhitektura Interfejsa:
+- Definisan `services.Service` interfejs, čime je omogućena potpuna izolacija slojeva i korišćenje Decorator Pattern-a.
+
+3. Implementacija Metrika (Prometheus/Go-Kit):
+- Kreiran `MetricsService` kao **Decorator** oko osnovnog `ConfigurationService`.
+- `MetricsService` automatski meri latenciju (`Histogram`) i broji pozive (`Counter`) za sve glavne CRUD operacije (Add, Get, Update, Delete), bez menjanja poslovne logike.
+
+4. Izlaganje Metrika:
+- Dodat `/metrics` endpoint koristeći `promhttp.Handler()` za izlaganje Prometheus metrika.
+
+5. Ažuriranje Handlera:
+- `handlers.NewConfigHandler` sada prima `services.Service` **interfejs**, čime je rešena zavisnost od konkretne implementacije.

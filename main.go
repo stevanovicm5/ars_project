@@ -1,10 +1,10 @@
 package main
 
 import (
-	_ "alati_projekat/docs"
 	"alati_projekat/handlers"
 	"alati_projekat/model"
 	"alati_projekat/repository"
+	"alati_projekat/services"
 	"context"
 	"log"
 	"net/http"
@@ -15,27 +15,29 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 type application struct {
-	Repo repository.Repository
+	Services services.Service
 }
 
-//	@title			Configuration API
-//	@version		1.0
-//	@description	This is a configuration management API with idempotency support.
-//	@termsOfService	http://swagger.io/terms/
+// @title   Configuration API
+// @version  1.0
+// @description This is a configuration management API with idempotency support.
+// @termsOfService http://swagger.io/terms/
 
-//	@contact.name	API Support
-//	@contact.url	http://www.swagger.io/support
-//	@contact.email	support@swagger.io
+// @contact.name API Support
+// @contact.url http://www.swagger.io/support
+// @contact.email support@swagger.io
 
-//	@license.name	MIT
-//	@license.url	https://opensource.org/licenses/MIT
+// @license.name MIT
+// @license.url https://opensource.org/licenses/MIT
 
-// @host		localhost:8080
-// @BasePath	/
+// @host  localhost:8080
+// @BasePath /
 func main() {
 	consulAddr := "http://127.0.0.1:8500"
 
@@ -50,8 +52,12 @@ func main() {
 	}
 	log.Printf("Successfully connected to Consul at %s", consulAddr)
 
+	baseService := services.NewConfigurationService(repo)
+
+	configService := services.NewMetricsService(baseService)
+
 	app := &application{
-		Repo: repo,
+		Services: configService,
 	}
 
 	configV1 := model.Configuration{
@@ -93,6 +99,7 @@ func main() {
 
 	log.Printf("Configuration service is running on http://localhost%s...", port)
 	log.Printf("Swagger UI available at http://localhost%s/swagger/index.html", port)
+	log.Printf("Prometheus metrics available at http://localhost%s/metrics", port)
 
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Server failed to start: %v", err)
@@ -101,6 +108,7 @@ func main() {
 	log.Println("Server exited gracefully.")
 }
 
+// IdempotencyMiddleware
 func (app *application) IdempotencyMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
@@ -117,7 +125,7 @@ func (app *application) IdempotencyMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		isProcessed, err := app.Repo.CheckIdempotencyKey(idempotencyKey)
+		isProcessed, err := app.Services.CheckIdempotencyKey(idempotencyKey)
 		if err != nil {
 			log.Printf("IDEMPOTENCY ERROR: Consul check failed: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -136,6 +144,7 @@ func (app *application) IdempotencyMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// setupRouter
 func setupRouter(app *application) *mux.Router {
 	router := mux.NewRouter()
 
@@ -145,7 +154,9 @@ func setupRouter(app *application) *mux.Router {
 		httpSwagger.URL("/swagger/doc.json"),
 	))
 
-	configHandler := handlers.NewConfigHandler(app.Repo)
+	router.Handle("/metrics", promhttp.Handler()).Methods("GET")
+
+	configHandler := handlers.NewConfigHandler(app.Services)
 
 	// configuration routes
 	configRouter := router.PathPrefix("/configurations").Subrouter()
@@ -168,13 +179,13 @@ func setupRouter(app *application) *mux.Router {
 
 // HealthCheck godoc
 //
-//	@Summary		Health check
-//	@Description	Check if service is healthy
-//	@Tags			health
-//	@Accept			json
-//	@Produce		json
-//	@Success		200	{object}	map[string]string
-//	@Router			/health [get]
+// @Summary  Health check
+// @Description Check if service is healthy
+// @Tags   health
+// @Accept   json
+// @Produce  json
+// @Success  200 {object} map[string]string
+// @Router   /health [get]
 func (app *application) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

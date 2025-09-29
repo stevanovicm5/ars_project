@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"alati_projekat/model"
-	"alati_projekat/repository"
+	"alati_projekat/services"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -12,12 +12,12 @@ import (
 )
 
 type ConfigHandler struct {
-	Repo repository.Repository
+	Service services.Service
 }
 
-func NewConfigHandler(repo repository.Repository) *ConfigHandler {
+func NewConfigHandler(service services.Service) *ConfigHandler {
 	return &ConfigHandler{
-		Repo: repo,
+		Service: service,
 	}
 }
 
@@ -25,18 +25,18 @@ func NewConfigHandler(repo repository.Repository) *ConfigHandler {
 
 // HandleAddConfiguration godoc
 //
-//	@Summary		Add a new configuration
-//	@Description	Add a new configuration with idempotency support
-//	@Tags			configurations
-//	@Accept			json
-//	@Produce		json
-//	@Param			X-Request-Id	header		string								true	"Idempotency Key (UUID)"
-//	@Param			request			body		model.CreateConfigurationRequest	true	"Configuration creation request"
-//	@Success		201				{object}	model.Configuration
-//	@Failure		400				{string}	string	"Bad Request"
-//	@Failure		409				{string}	string	"Conflict - Configuration already exists"
-//	@Failure		500				{string}	string	"Internal Server Error"
-//	@Router			/configurations [post]
+// @Summary    Add a new configuration
+// @Description  Add a new configuration with idempotency support
+// @Tags      configurations
+// @Accept     json
+// @Produce    json
+// @Param     X-Request-Id  header   string               true  "Idempotency Key (UUID)"
+// @Param     request     body    model.CreateConfigurationRequest  true  "Configuration creation request"
+// @Success    201       {object}  model.Configuration
+// @Failure    400       {string}  string "Bad Request"
+// @Failure    409       {string}  string "Conflict - Configuration already exists"
+// @Failure    500       {string}  string "Internal Server Error"
+// @Router     /configurations [post]
 func (h *ConfigHandler) HandleAddConfiguration(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -56,17 +56,11 @@ func (h *ConfigHandler) HandleAddConfiguration(w http.ResponseWriter, r *http.Re
 		Params:  req.Params,
 	}
 
-	if err := h.Repo.AddConfiguration(newConfig); err != nil {
+	idempotencyKey := r.Header.Get("X-Request-Id")
+
+	if err := h.Service.AddConfiguration(newConfig, idempotencyKey); err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
-	}
-
-	// IDEMPOTENCY SAVE
-	idempotencyKey := r.Header.Get("X-Request-Id")
-	if idempotencyKey != "" {
-		if err := h.Repo.SaveIdempotencyKey(idempotencyKey); err != nil {
-			log.Printf("IDEMPOTENCY WARNING: Failed to save key %s: %v", idempotencyKey, err)
-		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -76,18 +70,18 @@ func (h *ConfigHandler) HandleAddConfiguration(w http.ResponseWriter, r *http.Re
 
 // HandleGetConfiguration godoc
 //
-//	@Summary		Get configuration
-//	@Description	Get configuration by name and version
-//	@Tags			configurations
-//	@Accept			json
-//	@Produce		json
-//	@Param			name	query		string	true	"Configuration name"
-//	@Param			version	query		string	true	"Configuration version"
-//	@Success		200		{object}	model.Configuration
-//	@Failure		400		{string}	string	"Bad Request - Name and version are required"
-//	@Failure		404		{string}	string	"Configuration not found"
-//	@Failure		500		{string}	string	"Internal Server Error"
-//	@Router			/configurations [get]
+// @Summary    Get configuration
+// @Description  Get configuration by name and version
+// @Tags      configurations
+// @Accept     json
+// @Produce    json
+// @Param     name  query    string true  "Configuration name"
+// @Param     version query    string true  "Configuration version"
+// @Success    200   {object}  model.Configuration
+// @Failure    400   {string}  string "Bad Request - Name and version are required"
+// @Failure    404   {string}  string "Configuration not found"
+// @Failure    500   {string}  string "Internal Server Error"
+// @Router     /configurations [get]
 func (h *ConfigHandler) HandleGetConfiguration(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -102,7 +96,7 @@ func (h *ConfigHandler) HandleGetConfiguration(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	config, err := h.Repo.GetConfiguration(name, version)
+	config, err := h.Service.GetConfiguration(name, version)
 
 	if err != nil {
 		log.Printf("Error retrieving config %s/%s: %v", name, version, err)
@@ -117,18 +111,18 @@ func (h *ConfigHandler) HandleGetConfiguration(w http.ResponseWriter, r *http.Re
 
 // HandleUpdateConfiguration godoc
 //
-//	@Summary		Update a configuration
-//	@Description	Update an existing configuration with idempotency support
-//	@Tags			configurations
-//	@Accept			json
-//	@Produce		json
-//	@Param			X-Request-Id	header		string								true	"Idempotency Key (UUID)"
-//	@Param			request			body		model.CreateConfigurationRequest	true	"Configuration update request"
-//	@Success		200				{object}	model.Configuration
-//	@Failure		400				{string}	string	"Bad Request"
-//	@Failure		404				{string}	string	"Configuration not found"
-//	@Failure		500				{string}	string	"Internal Server Error"
-//	@Router			/configurations [put]
+// @Summary    Update a configuration
+// @Description  Update an existing configuration with idempotency support
+// @Tags      configurations
+// @Accept     json
+// @Produce    json
+// @Param     X-Request-Id  header   string               true  "Idempotency Key (UUID)"
+// @Param     request     body    model.CreateConfigurationRequest  true  "Configuration update request"
+// @Success    200       {object}  model.Configuration
+// @Failure    400       {string}  string "Bad Request"
+// @Failure    404       {string}  string "Configuration not found"
+// @Failure    500       {string}  string "Internal Server Error"
+// @Router     /configurations [put]
 func (h *ConfigHandler) HandleUpdateConfiguration(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodPut {
@@ -149,7 +143,9 @@ func (h *ConfigHandler) HandleUpdateConfiguration(w http.ResponseWriter, r *http
 		Params:  req.Params,
 	}
 
-	err := h.Repo.UpdateConfiguration(updatedConfig)
+	idempotencyKey := r.Header.Get("X-Request-Id")
+
+	err := h.Service.UpdateConfiguration(updatedConfig, idempotencyKey)
 
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
@@ -160,14 +156,6 @@ func (h *ConfigHandler) HandleUpdateConfiguration(w http.ResponseWriter, r *http
 		return
 	}
 
-	// IDEMPOTENCY SAVE
-	idempotencyKey := r.Header.Get("X-Request-Id")
-	if idempotencyKey != "" {
-		if err := h.Repo.SaveIdempotencyKey(idempotencyKey); err != nil {
-			log.Printf("IDEMPOTENCY WARNING: Failed to save key %s: %v", idempotencyKey, err)
-		}
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(updatedConfig)
@@ -175,18 +163,18 @@ func (h *ConfigHandler) HandleUpdateConfiguration(w http.ResponseWriter, r *http
 
 // HandleDeleteConfiguration godoc
 //
-//	@Summary		Delete a configuration
-//	@Description	Delete configuration by name and version
-//	@Tags			configurations
-//	@Accept			json
-//	@Produce		json
-//	@Param			name	query	string	true	"Configuration name"
-//	@Param			version	query	string	true	"Configuration version"
-//	@Success		204		"No Content - Successfully deleted"
-//	@Failure		400		{string}	string	"Bad Request - Name and version are required"
-//	@Failure		404		{string}	string	"Configuration not found"
-//	@Failure		500		{string}	string	"Internal Server Error"
-//	@Router			/configurations [delete]
+// @Summary    Delete a configuration
+// @Description  Delete configuration by name and version
+// @Tags      configurations
+// @Accept     json
+// @Produce    json
+// @Param     name  query  string true  "Configuration name"
+// @Param     version query  string true  "Configuration version"
+// @Success    204   "No Content - Successfully deleted"
+// @Failure    400   {string}  string "Bad Request - Name and version are required"
+// @Failure    404   {string}  string "Configuration not found"
+// @Failure    500   {string}  string "Internal Server Error"
+// @Router     /configurations [delete]
 func (h *ConfigHandler) HandleDeleteConfiguration(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -201,7 +189,7 @@ func (h *ConfigHandler) HandleDeleteConfiguration(w http.ResponseWriter, r *http
 		return
 	}
 
-	err := h.Repo.DeleteConfiguration(name, version)
+	err := h.Service.DeleteConfiguration(name, version)
 
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
@@ -220,18 +208,18 @@ func (h *ConfigHandler) HandleDeleteConfiguration(w http.ResponseWriter, r *http
 
 // HandleAddConfigurationGroup godoc
 //
-//	@Summary		Add a new configuration group
-//	@Description	Add a new configuration group with idempotency support
-//	@Tags			configgroups
-//	@Accept			json
-//	@Produce		json
-//	@Param			X-Request-Id	header		string						true	"Idempotency Key (UUID)"
-//	@Param			request			body		model.CreateGroupRequest	true	"Configuration group creation request"
-//	@Success		201				{object}	model.ConfigurationGroup
-//	@Failure		400				{string}	string	"Bad Request"
-//	@Failure		409				{string}	string	"Conflict - Configuration group already exists"
-//	@Failure		500				{string}	string	"Internal Server Error"
-//	@Router			/configgroups [post]
+// @Summary    Add a new configuration group
+// @Description  Add a new configuration group with idempotency support
+// @Tags      configgroups
+// @Accept     json
+// @Produce    json
+// @Param     X-Request-Id  header   string           true  "Idempotency Key (UUID)"
+// @Param     request     body    model.CreateGroupRequest  true  "Configuration group creation request"
+// @Success    201       {object}  model.ConfigurationGroup
+// @Failure    400       {string}  string "Bad Request"
+// @Failure    409       {string}  string "Conflict - Configuration group already exists"
+// @Failure    500       {string}  string "Internal Server Error"
+// @Router     /configgroups [post]
 func (h *ConfigHandler) HandleAddConfigurationGroup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -251,17 +239,11 @@ func (h *ConfigHandler) HandleAddConfigurationGroup(w http.ResponseWriter, r *ht
 		Configurations: req.Configurations,
 	}
 
-	if err := h.Repo.AddConfigurationGroup(newGroup); err != nil {
+	idempotencyKey := r.Header.Get("X-Request-Id")
+
+	if err := h.Service.AddConfigurationGroup(newGroup, idempotencyKey); err != nil {
 		http.Error(w, "Group creation failed: "+err.Error(), http.StatusConflict)
 		return
-	}
-
-	// IDEMPOTENCY SAVE
-	idempotencyKey := r.Header.Get("X-Request-Id")
-	if idempotencyKey != "" {
-		if err := h.Repo.SaveIdempotencyKey(idempotencyKey); err != nil {
-			log.Printf("IDEMPOTENCY WARNING: Failed to save key %s: %v", idempotencyKey, err)
-		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -271,18 +253,18 @@ func (h *ConfigHandler) HandleAddConfigurationGroup(w http.ResponseWriter, r *ht
 
 // HandleGetConfigurationGroup godoc
 //
-//	@Summary		Get configuration group
-//	@Description	Get configuration group by name and version
-//	@Tags			configgroups
-//	@Accept			json
-//	@Produce		json
-//	@Param			name	query		string	true	"Configuration group name"
-//	@Param			version	query		string	true	"Configuration group version"
-//	@Success		200		{object}	model.ConfigurationGroup
-//	@Failure		400		{string}	string	"Bad Request - Name and version are required"
-//	@Failure		404		{string}	string	"Configuration group not found"
-//	@Failure		500		{string}	string	"Internal Server Error"
-//	@Router			/configgroups [get]
+// @Summary    Get configuration group
+// @Description  Get configuration group by name and version
+// @Tags      configgroups
+// @Accept     json
+// @Produce    json
+// @Param     name  query    string true  "Configuration group name"
+// @Param     version query    string true  "Configuration group version"
+// @Success    200   {object}  model.ConfigurationGroup
+// @Failure    400   {string}  string "Bad Request - Name and version are required"
+// @Failure    404   {string}  string "Configuration group not found"
+// @Failure    500   {string}  string "Internal Server Error"
+// @Router     /configgroups [get]
 func (h *ConfigHandler) HandleGetConfigurationGroup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -297,7 +279,7 @@ func (h *ConfigHandler) HandleGetConfigurationGroup(w http.ResponseWriter, r *ht
 		return
 	}
 
-	group, err := h.Repo.GetConfigurationGroup(name, version)
+	group, err := h.Service.GetConfigurationGroup(name, version)
 
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
@@ -316,18 +298,18 @@ func (h *ConfigHandler) HandleGetConfigurationGroup(w http.ResponseWriter, r *ht
 
 // HandleUpdateConfigurationGroup godoc
 //
-//	@Summary		Update a configuration group
-//	@Description	Update an existing configuration group with idempotency support
-//	@Tags			configgroups
-//	@Accept			json
-//	@Produce		json
-//	@Param			X-Request-Id	header		string						true	"Idempotency Key (UUID)"
-//	@Param			request			body		model.CreateGroupRequest	true	"Configuration group update request"
-//	@Success		200				{object}	model.ConfigurationGroup
-//	@Failure		400				{string}	string	"Bad Request"
-//	@Failure		404				{string}	string	"Configuration group not found"
-//	@Failure		500				{string}	string	"Internal Server Error"
-//	@Router			/configgroups [put]
+// @Summary    Update a configuration group
+// @Description  Update an existing configuration group with idempotency support
+// @Tags      configgroups
+// @Accept     json
+// @Produce    json
+// @Param     X-Request-Id  header   string           true  "Idempotency Key (UUID)"
+// @Param     request     body    model.CreateGroupRequest  true  "Configuration group update request"
+// @Success    200       {object}  model.ConfigurationGroup
+// @Failure    400       {string}  string "Bad Request"
+// @Failure    404       {string}  string "Configuration group not found"
+// @Failure    500       {string}  string "Internal Server Error"
+// @Router     /configgroups [put]
 func (h *ConfigHandler) HandleUpdateConfigurationGroup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -347,7 +329,9 @@ func (h *ConfigHandler) HandleUpdateConfigurationGroup(w http.ResponseWriter, r 
 		Configurations: req.Configurations,
 	}
 
-	err := h.Repo.UpdateConfigurationGroup(updatedGroup)
+	idempotencyKey := r.Header.Get("X-Request-Id")
+
+	err := h.Service.UpdateConfigurationGroup(updatedGroup, idempotencyKey)
 
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
@@ -358,14 +342,6 @@ func (h *ConfigHandler) HandleUpdateConfigurationGroup(w http.ResponseWriter, r 
 		return
 	}
 
-	// IDEMPOTENCY SAVE
-	idempotencyKey := r.Header.Get("X-Request-Id")
-	if idempotencyKey != "" {
-		if err := h.Repo.SaveIdempotencyKey(idempotencyKey); err != nil {
-			log.Printf("IDEMPOTENCY WARNING: Failed to save key %s: %v", idempotencyKey, err)
-		}
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(updatedGroup)
@@ -373,18 +349,18 @@ func (h *ConfigHandler) HandleUpdateConfigurationGroup(w http.ResponseWriter, r 
 
 // HandleDeleteConfigurationGroup godoc
 //
-//	@Summary		Delete a configuration group
-//	@Description	Delete configuration group by name and version
-//	@Tags			configgroups
-//	@Accept			json
-//	@Produce		json
-//	@Param			name	query	string	true	"Configuration group name"
-//	@Param			version	query	string	true	"Configuration group version"
-//	@Success		204		"No Content - Successfully deleted"
-//	@Failure		400		{string}	string	"Bad Request - Name and version are required"
-//	@Failure		404		{string}	string	"Configuration group not found"
-//	@Failure		500		{string}	string	"Internal Server Error"
-//	@Router			/configgroups [delete]
+// @Summary    Delete a configuration group
+// @Description  Delete configuration group by name and version
+// @Tags      configgroups
+// @Accept     json
+// @Produce    json
+// @Param     name  query  string true  "Configuration group name"
+// @Param     version query  string true  "Configuration group version"
+// @Success    204   "No Content - Successfully deleted"
+// @Failure    400   {string}  string "Bad Request - Name and version are required"
+// @Failure    404   {string}  string "Configuration group not found"
+// @Failure    500   {string}  string "Internal Server Error"
+// @Router     /configgroups [delete]
 func (h *ConfigHandler) HandleDeleteConfigurationGroup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -399,7 +375,8 @@ func (h *ConfigHandler) HandleDeleteConfigurationGroup(w http.ResponseWriter, r 
 		return
 	}
 
-	err := h.Repo.DeleteConfigurationGroup(name, version)
+	// IZMENA: Pozivamo Servis
+	err := h.Service.DeleteConfigurationGroup(name, version)
 
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
