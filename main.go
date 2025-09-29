@@ -15,8 +15,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
@@ -150,9 +150,12 @@ func setupRouter(app *application) *mux.Router {
 
 	router.Use(app.IdempotencyMiddleware)
 
+	staticSwaggerFiles := http.FileServer(http.Dir("./docs"))
+	router.PathPrefix("/swagger/static/").Handler(http.StripPrefix("/swagger/static/", staticSwaggerFiles))
+
 	router.PathPrefix("/swagger/").Handler(httpSwagger.Handler(
-		httpSwagger.URL("/swagger/doc.json"),
-	))
+		httpSwagger.URL("/swagger/static/swagger.json"),
+	)).Methods("GET")
 
 	router.Handle("/metrics", promhttp.Handler()).Methods("GET")
 
