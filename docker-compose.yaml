@@ -1,3 +1,4 @@
+version: '3.8'
 
 services:
   app:
@@ -8,8 +9,11 @@ services:
       - 8080:8080
     environment:
       - CONSUL_HTTP_ADDR=consul:8500
+      - OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317
+      - OTEL_SERVICE_NAME=config-service 
     depends_on:
       - consul
+      - jaeger
     networks:
       - network
 
@@ -24,6 +28,19 @@ services:
     networks:
       - network
       
+  # NOVO: Jaeger servis za OpenTelemetry Tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: ars_jaeger
+    restart: always
+    environment:
+      COLLECTOR_OTLP_ENABLED: true # Omogućavanje OTLP GRPC za izvoz
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "4317:4317"   # OTLP gRPC port za aplikaciju
+    networks:
+      - network
+
   prometheus:
     image: prom/prometheus:v2.48.0
     container_name: ars_prometheus

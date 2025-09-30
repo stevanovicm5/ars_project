@@ -2,18 +2,25 @@ package repository
 
 import (
 	"alati_projekat/model"
+	"context" // NOVI IMPORT
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/hashicorp/consul/api"
+	"go.opentelemetry.io/otel"           // NOVI IMPORT
+	"go.opentelemetry.io/otel/attribute" // NOVI IMPORT
+	"go.opentelemetry.io/otel/codes"     // NOVI IMPORT
 )
 
 const (
 	ConfigsPrefix = "configurations/"
 	GroupsPrefix  = "configgroups/"
 )
+
+// Pomoćna funkcija za kreiranje Tracera
+var tracer = otel.Tracer("consul-repository-tracer")
 
 type ConsulRepository struct {
 	Client *api.Client
@@ -34,9 +41,23 @@ func NewConsulRepository(addr string) (*ConsulRepository, error) {
 	}, nil
 }
 
+// Pomoćna funkcija za kreiranje ključa (ostavljam Vašu originalnu logiku)
+func makeKey(name, version string) string {
+	return fmt.Sprintf("%s/%s", name, version)
+}
+
 // CONFIGURATIONS
 // ADD
-func (r *ConsulRepository) AddConfiguration(config model.Configuration) error {
+func (r *ConsulRepository) AddConfiguration(ctx context.Context, config model.Configuration) (err error) {
+	ctx, span := tracer.Start(ctx, "AddConfiguration")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("config.name", config.Name), attribute.String("config.version", config.Version))
+
 	key := ConfigsPrefix + makeKey(config.Name, config.Version)
 
 	data, err := json.Marshal(config)
@@ -46,6 +67,8 @@ func (r *ConsulRepository) AddConfiguration(config model.Configuration) error {
 
 	p := &api.KVPair{Key: key, Value: data}
 
+	// Koristimo r.Client, ali ne prosleđujemo ctx jer Consul API ne podržava direktno prosleđivanje Go konteksta u Get/Put metodama
+	// Ipak, Span je kreiran i biće završen, a roditelj Span (iz Service sloja) će prikupiti ovo vreme.
 	_, err = r.Client.KV().Put(p, nil)
 	if err != nil {
 		return fmt.Errorf("failed to put configuration into Consul: %w", err)
@@ -55,8 +78,16 @@ func (r *ConsulRepository) AddConfiguration(config model.Configuration) error {
 }
 
 // GET
-func (r *ConsulRepository) GetConfiguration(name, version string) (model.Configuration, error) {
-	// ISPRAVKA: Koristimo ConfigsPrefix
+func (r *ConsulRepository) GetConfiguration(ctx context.Context, name, version string) (config model.Configuration, err error) {
+	ctx, span := tracer.Start(ctx, "GetConfiguration")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("config.name", name), attribute.String("config.version", version))
+
 	key := ConfigsPrefix + makeKey(name, version)
 
 	pair, _, err := r.Client.KV().Get(key, nil)
@@ -68,7 +99,6 @@ func (r *ConsulRepository) GetConfiguration(name, version string) (model.Configu
 		return model.Configuration{}, errors.New("configuration not found")
 	}
 
-	var config model.Configuration
 	if err := json.Unmarshal(pair.Value, &config); err != nil {
 		return model.Configuration{}, fmt.Errorf("failed to decode configuration JSON: %w", err)
 	}
@@ -77,9 +107,18 @@ func (r *ConsulRepository) GetConfiguration(name, version string) (model.Configu
 }
 
 // UPDATE
-func (r *ConsulRepository) UpdateConfiguration(config model.Configuration) error {
-	_, err := r.GetConfiguration(config.Name, config.Version)
-	if err != nil {
+func (r *ConsulRepository) UpdateConfiguration(ctx context.Context, config model.Configuration) (err error) {
+	ctx, span := tracer.Start(ctx, "UpdateConfiguration")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("config.name", config.Name), attribute.String("config.version", config.Version))
+
+	// Proveravamo postojanje pre update-a. Prosleđujemo ctx!
+	if _, err := r.GetConfiguration(ctx, config.Name, config.Version); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return errors.New("configuration not found for update")
 		}
@@ -103,10 +142,19 @@ func (r *ConsulRepository) UpdateConfiguration(config model.Configuration) error
 }
 
 // DELETE
-func (r *ConsulRepository) DeleteConfiguration(name, version string) error {
+func (r *ConsulRepository) DeleteConfiguration(ctx context.Context, name, version string) (err error) {
+	ctx, span := tracer.Start(ctx, "DeleteConfiguration")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("config.name", name), attribute.String("config.version", version))
+
 	key := ConfigsPrefix + makeKey(name, version)
 
-	_, err := r.Client.KV().Delete(key, nil)
+	_, err = r.Client.KV().Delete(key, nil)
 	if err != nil {
 		return fmt.Errorf("failed to delete configuration from Consul: %w", err)
 	}
@@ -116,7 +164,16 @@ func (r *ConsulRepository) DeleteConfiguration(name, version string) error {
 
 // CONFIGURATION GROUPS
 // ADD
-func (r *ConsulRepository) AddConfigurationGroup(group model.ConfigurationGroup) error {
+func (r *ConsulRepository) AddConfigurationGroup(ctx context.Context, group model.ConfigurationGroup) (err error) {
+	ctx, span := tracer.Start(ctx, "AddConfigurationGroup")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("group.name", group.Name), attribute.String("group.version", group.Version))
+
 	key := GroupsPrefix + makeKey(group.Name, group.Version)
 
 	data, err := json.Marshal(group)
@@ -135,7 +192,16 @@ func (r *ConsulRepository) AddConfigurationGroup(group model.ConfigurationGroup)
 }
 
 // GET
-func (r *ConsulRepository) GetConfigurationGroup(name, version string) (model.ConfigurationGroup, error) {
+func (r *ConsulRepository) GetConfigurationGroup(ctx context.Context, name, version string) (group model.ConfigurationGroup, err error) {
+	ctx, span := tracer.Start(ctx, "GetConfigurationGroup")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("group.name", name), attribute.String("group.version", version))
+
 	key := GroupsPrefix + makeKey(name, version)
 
 	pair, _, err := r.Client.KV().Get(key, nil)
@@ -147,7 +213,6 @@ func (r *ConsulRepository) GetConfigurationGroup(name, version string) (model.Co
 		return model.ConfigurationGroup{}, errors.New("configuration group not found")
 	}
 
-	var group model.ConfigurationGroup
 	if err := json.Unmarshal(pair.Value, &group); err != nil {
 		return model.ConfigurationGroup{}, fmt.Errorf("failed to decode configuration group JSON: %w", err)
 	}
@@ -156,9 +221,18 @@ func (r *ConsulRepository) GetConfigurationGroup(name, version string) (model.Co
 }
 
 // UPDATE
-func (r *ConsulRepository) UpdateConfigurationGroup(group model.ConfigurationGroup) error {
-	_, err := r.GetConfigurationGroup(group.Name, group.Version)
-	if err != nil {
+func (r *ConsulRepository) UpdateConfigurationGroup(ctx context.Context, group model.ConfigurationGroup) (err error) {
+	ctx, span := tracer.Start(ctx, "UpdateConfigurationGroup")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("group.name", group.Name), attribute.String("group.version", group.Version))
+
+	// Proveravamo postojanje pre update-a. Prosleđujemo ctx!
+	if _, err := r.GetConfigurationGroup(ctx, group.Name, group.Version); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return errors.New("configuration group not found for update")
 		}
@@ -182,10 +256,19 @@ func (r *ConsulRepository) UpdateConfigurationGroup(group model.ConfigurationGro
 }
 
 // DELETE
-func (r *ConsulRepository) DeleteConfigurationGroup(name, version string) error {
+func (r *ConsulRepository) DeleteConfigurationGroup(ctx context.Context, name, version string) (err error) {
+	ctx, span := tracer.Start(ctx, "DeleteConfigurationGroup")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("group.name", name), attribute.String("group.version", version))
+
 	key := GroupsPrefix + makeKey(name, version)
 
-	_, err := r.Client.KV().Delete(key, nil)
+	_, err = r.Client.KV().Delete(key, nil)
 	if err != nil {
 		return fmt.Errorf("failed to delete configuration group from Consul: %w", err)
 	}
@@ -195,7 +278,16 @@ func (r *ConsulRepository) DeleteConfigurationGroup(name, version string) error 
 
 const IdempotencyPrefix = "idempotency/"
 
-func (r *ConsulRepository) CheckIdempotencyKey(key string) (bool, error) {
+func (r *ConsulRepository) CheckIdempotencyKey(ctx context.Context, key string) (found bool, err error) {
+	ctx, span := tracer.Start(ctx, "CheckIdempotencyKey")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("idempotency.key", key))
+
 	fullKey := IdempotencyPrefix + key
 	pair, _, err := r.Client.KV().Get(fullKey, nil)
 	if err != nil {
@@ -204,11 +296,20 @@ func (r *ConsulRepository) CheckIdempotencyKey(key string) (bool, error) {
 	return pair != nil, nil
 }
 
-func (r *ConsulRepository) SaveIdempotencyKey(key string) error {
+func (r *ConsulRepository) SaveIdempotencyKey(ctx context.Context, key string) (err error) {
+	ctx, span := tracer.Start(ctx, "SaveIdempotencyKey")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("idempotency.key", key))
+
 	fullKey := IdempotencyPrefix + key
 	p := &api.KVPair{Key: fullKey, Value: []byte("processed")}
 
-	_, err := r.Client.KV().Put(p, nil)
+	_, err = r.Client.KV().Put(p, nil)
 	if err != nil {
 		return fmt.Errorf("failed to save idempotency key to Consul: %w", err)
 	}

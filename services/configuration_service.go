@@ -4,6 +4,7 @@ import (
 	"alati_projekat/labels"
 	"alati_projekat/model"
 	"alati_projekat/repository"
+	"context"
 	"log"
 )
 
@@ -21,73 +22,73 @@ var _ Service = (*ConfigurationService)(nil)
 
 // --- IDEMPOTENCY LOGIC ---
 
-func (s *ConfigurationService) CheckIdempotencyKey(key string) (bool, error) {
-	return s.Repo.CheckIdempotencyKey(key)
+func (s *ConfigurationService) CheckIdempotencyKey(ctx context.Context, key string) (bool, error) {
+	return s.Repo.CheckIdempotencyKey(ctx, key)
 }
 
-func (s *ConfigurationService) SaveIdempotencyKey(key string) {
+func (s *ConfigurationService) SaveIdempotencyKey(ctx context.Context, key string) {
 	if key == "" {
 		return
 	}
-	if err := s.Repo.SaveIdempotencyKey(key); err != nil {
+	if err := s.Repo.SaveIdempotencyKey(ctx, key); err != nil {
 		log.Printf("IDEMPOTENCY WARNING: Failed to save key %s: %v", key, err)
 	}
 }
 
 // --- CONFIGURATION CRUD LOGIC  ---
 
-func (s *ConfigurationService) AddConfiguration(config model.Configuration, idempotencyKey string) error {
-	if err := s.Repo.AddConfiguration(config); err != nil {
+func (s *ConfigurationService) AddConfiguration(ctx context.Context, config model.Configuration, idempotencyKey string) error {
+	if err := s.Repo.AddConfiguration(ctx, config); err != nil {
 		return err
 	}
-	s.SaveIdempotencyKey(idempotencyKey)
+	s.SaveIdempotencyKey(ctx, idempotencyKey)
 	return nil
 }
 
-func (s *ConfigurationService) GetConfiguration(name string, version string) (model.Configuration, error) {
-	return s.Repo.GetConfiguration(name, version)
+func (s *ConfigurationService) GetConfiguration(ctx context.Context, name string, version string) (model.Configuration, error) {
+	return s.Repo.GetConfiguration(ctx, name, version)
 }
 
-func (s *ConfigurationService) UpdateConfiguration(config model.Configuration, idempotencyKey string) error {
-	if err := s.Repo.UpdateConfiguration(config); err != nil {
+func (s *ConfigurationService) UpdateConfiguration(ctx context.Context, config model.Configuration, idempotencyKey string) error {
+	if err := s.Repo.UpdateConfiguration(ctx, config); err != nil {
 		return err
 	}
-	s.SaveIdempotencyKey(idempotencyKey)
+	s.SaveIdempotencyKey(ctx, idempotencyKey)
 	return nil
 }
 
-func (s *ConfigurationService) DeleteConfiguration(name string, version string) error {
-	return s.Repo.DeleteConfiguration(name, version)
+func (s *ConfigurationService) DeleteConfiguration(ctx context.Context, name string, version string) error {
+	return s.Repo.DeleteConfiguration(ctx, name, version)
 }
 
 // --- CONFIGURATION GROUP CRUD LOGIC
 
-func (s *ConfigurationService) AddConfigurationGroup(group model.ConfigurationGroup, idempotencyKey string) error {
-	if err := s.Repo.AddConfigurationGroup(group); err != nil {
+func (s *ConfigurationService) AddConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) error {
+	if err := s.Repo.AddConfigurationGroup(ctx, group); err != nil {
 		return err
 	}
-	s.SaveIdempotencyKey(idempotencyKey)
+	s.SaveIdempotencyKey(ctx, idempotencyKey)
 	return nil
 }
 
-func (s *ConfigurationService) GetConfigurationGroup(name string, version string) (model.ConfigurationGroup, error) {
-	return s.Repo.GetConfigurationGroup(name, version)
+func (s *ConfigurationService) GetConfigurationGroup(ctx context.Context, name string, version string) (model.ConfigurationGroup, error) {
+	return s.Repo.GetConfigurationGroup(ctx, name, version)
 }
 
-func (s *ConfigurationService) UpdateConfigurationGroup(group model.ConfigurationGroup, idempotencyKey string) error {
-	if err := s.Repo.UpdateConfigurationGroup(group); err != nil {
+func (s *ConfigurationService) UpdateConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) error {
+	if err := s.Repo.UpdateConfigurationGroup(ctx, group); err != nil {
 		return err
 	}
-	s.SaveIdempotencyKey(idempotencyKey)
+	s.SaveIdempotencyKey(ctx, idempotencyKey)
 	return nil
 }
 
-func (s *ConfigurationService) DeleteConfigurationGroup(name string, version string) error {
-	return s.Repo.DeleteConfigurationGroup(name, version)
+func (s *ConfigurationService) DeleteConfigurationGroup(ctx context.Context, name string, version string) error {
+	return s.Repo.DeleteConfigurationGroup(ctx, name, version)
 }
 
-func (s *ConfigurationService) FilterConfigsByLabels(name, version string, want map[string]string) ([]model.Configuration, error) {
-	g, err := s.Repo.GetConfigurationGroup(name, version)
+func (s *ConfigurationService) FilterConfigsByLabels(ctx context.Context, name, version string, want map[string]string) ([]model.Configuration, error) {
+	g, err := s.Repo.GetConfigurationGroup(ctx, name, version)
 	if err != nil {
 		return nil, err
 	}
@@ -100,8 +101,8 @@ func (s *ConfigurationService) FilterConfigsByLabels(name, version string, want 
 	return out, nil
 }
 
-func (s *ConfigurationService) DeleteConfigsByLabels(name, version string, want map[string]string) (int, error) {
-	g, err := s.Repo.GetConfigurationGroup(name, version)
+func (s *ConfigurationService) DeleteConfigsByLabels(ctx context.Context, name, version string, want map[string]string) (int, error) {
+	g, err := s.Repo.GetConfigurationGroup(ctx, name, version)
 	if err != nil {
 		return 0, err
 	}
@@ -119,7 +120,7 @@ func (s *ConfigurationService) DeleteConfigsByLabels(name, version string, want 
 		return 0, nil
 	}
 	g.Configurations = filtered
-	if err := s.Repo.AddConfigurationGroup(g); err != nil {
+	if err := s.Repo.AddConfigurationGroup(ctx, g); err != nil {
 		return 0, err
 	}
 	return deleted, nil

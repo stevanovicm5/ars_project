@@ -3,17 +3,12 @@ package repository
 import (
 	"alati_projekat/model"
 	"errors"
-	"fmt"
 )
 
 type InMemoryRepository struct {
 	configs         map[string]model.Configuration
 	groups          map[string]model.ConfigurationGroup
 	idempotencyKeys map[string]struct{}
-}
-
-func makeKey(name, version string) string {
-	return fmt.Sprintf("%s-%s", name, version)
 }
 
 func NewInMemoryRepository() *InMemoryRepository {

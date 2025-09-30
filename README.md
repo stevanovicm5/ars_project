@@ -43,3 +43,5 @@ docker-compose up --build
 [Grafanu](http://localhost:3000) (username: admin | password: admin ; connection:http://host.docker.internal:9090; query: "app_http_requests_total")
 
 [Prometheus](http://localhost:9090) (query: "app_http_requests_total")
+
+[JaegerUI]	(http://localhost:16686)

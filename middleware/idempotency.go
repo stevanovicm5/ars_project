@@ -36,7 +36,7 @@ func (im *IdempotencyMiddleware) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		isProcessed, err := im.Service.CheckIdempotencyKey(idempotencyKey)
+		isProcessed, err := im.Service.CheckIdempotencyKey(r.Context(), idempotencyKey)
 		if err != nil {
 			log.Printf("IDEMPOTENCY ERROR: Consul check failed: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)

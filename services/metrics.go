@@ -2,6 +2,7 @@ package services
 
 import (
 	"alati_projekat/model"
+	"context" // NOVI IMPORT
 	"time"
 
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
@@ -14,7 +15,7 @@ type MetricsService struct {
 }
 
 func NewMetricsService(next Service) *MetricsService {
-	// Counter
+	// ... (Inicijalizacija Prometheusa ostaje ista)
 	requestCount := stdprometheus.NewCounterVec(stdprometheus.CounterOpts{
 		Namespace: "app",
 		Subsystem: "http",
@@ -44,59 +45,62 @@ func (s *MetricsService) measure(method string, start time.Time) {
 	s.RequestLatency.WithLabelValues(method).Observe(time.Since(start).Seconds())
 }
 
-func (s *MetricsService) AddConfiguration(config model.Configuration, idempotencyKey string) (err error) {
+// SVE METODE SADA PRIMAJU ctx context.Context
+
+func (s *MetricsService) AddConfiguration(ctx context.Context, config model.Configuration, idempotencyKey string) (err error) {
 	defer s.measure("AddConfiguration", time.Now())
-	return s.Next.AddConfiguration(config, idempotencyKey)
+	return s.Next.AddConfiguration(ctx, config, idempotencyKey) // PROSLEĐUJE ctx
 }
 
-func (s *MetricsService) GetConfiguration(name string, version string) (out model.Configuration, err error) {
+func (s *MetricsService) GetConfiguration(ctx context.Context, name string, version string) (out model.Configuration, err error) {
 	defer s.measure("GetConfiguration", time.Now())
-	return s.Next.GetConfiguration(name, version)
+	return s.Next.GetConfiguration(ctx, name, version) // PROSLEĐUJE ctx
 }
 
-func (s *MetricsService) UpdateConfiguration(config model.Configuration, idempotencyKey string) (err error) {
+func (s *MetricsService) UpdateConfiguration(ctx context.Context, config model.Configuration, idempotencyKey string) (err error) {
 	defer s.measure("UpdateConfiguration", time.Now())
-	return s.Next.UpdateConfiguration(config, idempotencyKey)
+	return s.Next.UpdateConfiguration(ctx, config, idempotencyKey) // PROSLEĐUJE ctx
 }
 
-func (s *MetricsService) DeleteConfiguration(name string, version string) (err error) {
+func (s *MetricsService) DeleteConfiguration(ctx context.Context, name string, version string) (err error) {
 	defer s.measure("DeleteConfiguration", time.Now())
-	return s.Next.DeleteConfiguration(name, version)
+	return s.Next.DeleteConfiguration(ctx, name, version) // PROSLEĐUJE ctx
 }
 
-func (s *MetricsService) AddConfigurationGroup(group model.ConfigurationGroup, idempotencyKey string) (err error) {
+func (s *MetricsService) AddConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) (err error) {
 	defer s.measure("AddConfigurationGroup", time.Now())
-	return s.Next.AddConfigurationGroup(group, idempotencyKey)
+	return s.Next.AddConfigurationGroup(ctx, group, idempotencyKey) // PROSLEĐUJE ctx
 }
 
-func (s *MetricsService) GetConfigurationGroup(name string, version string) (out model.ConfigurationGroup, err error) {
+func (s *MetricsService) GetConfigurationGroup(ctx context.Context, name string, version string) (out model.ConfigurationGroup, err error) {
 	defer s.measure("GetConfigurationGroup", time.Now())
-	return s.Next.GetConfigurationGroup(name, version)
+	return s.Next.GetConfigurationGroup(ctx, name, version) // PROSLEĐUJE ctx
 }
 
-func (s *MetricsService) UpdateConfigurationGroup(group model.ConfigurationGroup, idempotencyKey string) (err error) {
+func (s *MetricsService) UpdateConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) (err error) {
 	defer s.measure("UpdateConfigurationGroup", time.Now())
-	return s.Next.UpdateConfigurationGroup(group, idempotencyKey)
+	return s.Next.UpdateConfigurationGroup(ctx, group, idempotencyKey) // PROSLEĐUJE ctx
 }
 
-func (s *MetricsService) DeleteConfigurationGroup(name string, version string) (err error) {
+func (s *MetricsService) DeleteConfigurationGroup(ctx context.Context, name string, version string) (err error) {
 	defer s.measure("DeleteConfigurationGroup", time.Now())
-	return s.Next.DeleteConfigurationGroup(name, version)
+	return s.Next.DeleteConfigurationGroup(ctx, name, version) // PROSLEĐUJE ctx
 }
 
-func (s *MetricsService) CheckIdempotencyKey(key string) (bool, error) {
-	return s.Next.CheckIdempotencyKey(key)
+func (s *MetricsService) CheckIdempotencyKey(ctx context.Context, key string) (bool, error) {
+	return s.Next.CheckIdempotencyKey(ctx, key) // PROSLEĐUJE ctx
 }
 
-func (s *MetricsService) SaveIdempotencyKey(key string) {
-	s.Next.SaveIdempotencyKey(key)
+func (s *MetricsService) SaveIdempotencyKey(ctx context.Context, key string) {
+	s.Next.SaveIdempotencyKey(ctx, key) // PROSLEĐUJE ctx
 }
-func (s *MetricsService) FilterConfigsByLabels(name, version string, want map[string]string) (out []model.Configuration, err error) {
+
+func (s *MetricsService) FilterConfigsByLabels(ctx context.Context, name, version string, want map[string]string) (out []model.Configuration, err error) {
 	defer s.measure("FilterConfigsByLabels", time.Now())
-	return s.Next.FilterConfigsByLabels(name, version, want)
+	return s.Next.FilterConfigsByLabels(ctx, name, version, want) // PROSLEĐUJE ctx
 }
 
-func (s *MetricsService) DeleteConfigsByLabels(name, version string, want map[string]string) (deleted int, err error) {
+func (s *MetricsService) DeleteConfigsByLabels(ctx context.Context, name, version string, want map[string]string) (deleted int, err error) {
 	defer s.measure("DeleteConfigsByLabels", time.Now())
-	return s.Next.DeleteConfigsByLabels(name, version, want)
+	return s.Next.DeleteConfigsByLabels(ctx, name, version, want) // PROSLEĐUJE ctx
 }

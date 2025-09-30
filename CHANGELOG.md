@@ -155,3 +155,9 @@ Graceful error handling u svim middleware komponentama
 Middleware fajlovi uključeni u Docker build
 Automatsko testiranje rate limitinga pri pokretanju
 Poboljšani health checkovi sa statusom limita
+
+---- 30. Septembar 2025 ----
+Opis:
+Implementirana distribuirana praćenja (Tracing) sa Jaegerom i OpenTelemetryjem
+Kljucne promene:
+Implementirano je kompletno praćenje toka zahteva (tracing) za Configuration Service korišćenjem OpenTelemetry SDK-a i OTLP gRPC protokola. Postavili smo Jaeger u Docker Compose za vizualizaciju, što omogućava praćenje latencije i toka podataka kroz sve slojeve aplikacije (Handler, Service, Repository).

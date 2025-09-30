@@ -20,14 +20,69 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	httpSwagger "github.com/swaggo/http-swagger"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
 )
 
 type application struct {
 	Services services.Service
 }
 
-// @title   Configuration API
-// @version  1.0
+func initTracer() *sdktrace.TracerProvider {
+	ctx := context.Background()
+
+	// 1. ČITANJE ENDPOINT-A IZ OKRUŽENJA (OTEL_EXPORTER_OTLP_ENDPOINT)
+	otlpEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if otlpEndpoint == "" {
+		otlpEndpoint = "jaeger:4317" // Pad nazad (fallback)
+	}
+
+	// AŽURIRANA LINIJA: Sada šaljemo endpoint kao opciju.
+	exporter, err := otlptracegrpc.New(
+		ctx,
+		otlptracegrpc.WithInsecure(),
+		otlptracegrpc.WithEndpoint(otlpEndpoint), // <-- KRITIČNA IZMENA
+	)
+	if err != nil {
+		log.Fatalf("failed to create OTLP exporter: %v", err)
+	}
+
+	// ... Ostatak koda ostaje kao što smo ga poslednji put ispravili
+	serviceName := os.Getenv("OTEL_SERVICE_NAME")
+	if serviceName == "" {
+		serviceName = "configuration-service-default"
+	}
+
+	res, err := resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceNameKey.String(serviceName),
+			attribute.String("environment", "docker-compose"),
+		),
+	)
+	if err != nil {
+		log.Fatalf("failed to create resource: %v", err)
+	}
+	// =========================================================================
+
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(res),
+	)
+
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+
+	return tp
+}
+
+// @title  Configuration API
+// @version 1.0
 // @description This is a configuration management API with idempotency support.
 // @termsOfService http://swagger.io/terms/
 
@@ -38,9 +93,17 @@ type application struct {
 // @license.name MIT
 // @license.url https://opensource.org/licenses/MIT
 
-// @host  localhost:8080
+// @host localhost:8080
 // @BasePath /
 func main() {
+	tp := initTracer()
+	defer func() {
+		if err := tp.Shutdown(context.Background()); err != nil {
+			log.Printf("Error shutting down tracer provider: %v", err)
+		}
+	}()
+	// =====================================
+
 	consulAddr := "http://consul:8500"
 
 	if os.Getenv("CONSUL_HTTP_ADDR") != "" {
@@ -55,19 +118,24 @@ func main() {
 	log.Printf("Successfully connected to Consul at %s", consulAddr)
 
 	baseService := services.NewConfigurationService(repo)
-	configService := services.NewMetricsService(baseService)
+	tracingService := services.NewTracingService(baseService)
+	configService := services.NewMetricsService(tracingService)
 
 	app := &application{
 		Services: configService,
 	}
-
 	configV1 := model.Configuration{
 		ID:      uuid.New(),
 		Name:    "ServiceX",
 		Version: "v1.0.0",
 		Params:  []model.Parameter{{Key: "test", Value: "ready"}},
 	}
-	if err := repo.AddConfiguration(configV1); err != nil {
+
+	if err := repo.AddConfiguration(context.Background(), configV1); err != nil {
+		log.Printf("Warning: Failed to add initial test configuration: %v", err)
+	}
+
+	if err := repo.AddConfiguration(context.Background(), configV1); err != nil {
 		log.Printf("Warning: Failed to add initial test configuration: %v", err)
 	}
 
@@ -114,20 +182,17 @@ func main() {
 func setupRouter(app *application) *mux.Router {
 	router := mux.NewRouter()
 
-	// 1. METRICS ENDPOINT - BEZ MIDDLEWARE-A
 	router.Handle("/metrics", promhttp.Handler()).Methods("GET")
 
-	// 2. HEALTH CHECK - takođe bez middleware-a
 	router.HandleFunc("/health", app.handleHealthCheck).Methods("GET")
 
-	// 3. KREIRAJTE configHandler OVDE
 	configHandler := handlers.NewConfigHandler(app.Services)
 
-	// 4. KREIRAJTE POSEBNU RUTU SA MIDDLEWARE-OM ZA SVE OSTALO
 	rateLimiter := middleware.NewRateLimiter(100, time.Minute)
 	idempotencyMiddleware := middleware.NewIdempotencyMiddleware(app.Services)
 
 	apiRouter := router.PathPrefix("/").Subrouter()
+	apiRouter.Use(middleware.TracingMiddleware)
 	apiRouter.Use(rateLimiter.Middleware)
 	apiRouter.Use(idempotencyMiddleware.Middleware)
 
@@ -161,13 +226,13 @@ func setupRouter(app *application) *mux.Router {
 
 // HealthCheck godoc
 //
-// @Summary  Health check
+// @Summary Health check
 // @Description Check if service is healthy
-// @Tags   health
-// @Accept   json
-// @Produce  json
-// @Success  200 {object} map[string]string
-// @Router   /health [get]
+// @Tags  health
+// @Accept  json
+// @Produce json
+// @Success 200 {object} map[string]string
+// @Router  /health [get]
 func (app *application) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -187,7 +252,6 @@ func (app *application) testRateLimiting() {
 
 	testIP := "192.168.1.100"
 
-	// Test 1: First 3 requests should succeed
 	successCount := 0
 	for i := 1; i <= 3; i++ {
 		req := httptest.NewRequest("GET", "/test", nil)
@@ -204,7 +268,6 @@ func (app *application) testRateLimiting() {
 		}
 	}
 
-	// Test 2: Fourth request should be rate limited
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.RemoteAddr = testIP + ":8080"
 	rr := httptest.NewRecorder()
