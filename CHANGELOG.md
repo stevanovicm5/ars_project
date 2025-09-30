@@ -157,7 +157,27 @@ Automatsko testiranje rate limitinga pri pokretanju
 Poboljšani health checkovi sa statusom limita
 
 ---- 30. Septembar 2025 ----
+Ognjen K
 Opis:
 Implementirana distribuirana praćenja (Tracing) sa Jaegerom i OpenTelemetryjem
 Kljucne promene:
 Implementirano je kompletno praćenje toka zahteva (tracing) za Configuration Service korišćenjem OpenTelemetry SDK-a i OTLP gRPC protokola. Postavili smo Jaeger u Docker Compose za vizualizaciju, što omogućava praćenje latencije i toka podataka kroz sve slojeve aplikacije (Handler, Service, Repository).
+
+---- 1. Oktobar 2025 ----
+Ognjen B
+Opis:
+Dodata Test Infrastruktura i CI/CD Pipeline
+Ova faza je fokusirana na implementaciju test strategije i GitHub Actions CI/CD pipeline-a.
+
+Ključne Implementacije:
+1. Kompletan Test Suite:
+Middleware Testovi - Rate limiting i idempotency middleware
+Handler Testovi - HTTP endpointovi sa mock servisima
+Service Testovi - Business logika sa mock repository
+Repository Testovi - Integracija sa Consul-om
+
+2. GitHub Actions CI Pipeline:
+Automatsko pokretanje na push/pull request
+Consul kontejner za integracione testove
+Multi-stage testiranje - jedinčni i integracioni testovi
+Code quality checks - gofmt i go vet

@@ -9,7 +9,6 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/signal"
 	"syscall"
@@ -170,8 +169,6 @@ func main() {
 	log.Printf("Swagger UI available at http://localhost%s/swagger/index.html", port)
 	log.Printf("Prometheus metrics available at http://localhost%s/metrics", port)
 
-	app.testRateLimiting()
-
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Server failed to start: %v", err)
 	}
@@ -237,52 +234,4 @@ func (app *application) handleHealthCheck(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status": "healthy", "service": "configuration-service"}`))
-}
-
-func (app *application) testRateLimiting() {
-	log.Println("Testing rate limiting...")
-
-	testLimiter := middleware.NewRateLimiter(3, time.Minute)
-
-	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("OK"))
-	})
-
-	handler := testLimiter.Middleware(testHandler)
-
-	testIP := "192.168.1.100"
-
-	successCount := 0
-	for i := 1; i <= 3; i++ {
-		req := httptest.NewRequest("GET", "/test", nil)
-		req.RemoteAddr = testIP + ":8080"
-		rr := httptest.NewRecorder()
-
-		handler.ServeHTTP(rr, req)
-
-		if rr.Code == http.StatusOK {
-			successCount++
-			log.Printf("Request %d: SUCCESS (Remaining: %s)", i, rr.Header().Get("X-RateLimit-Remaining"))
-		} else {
-			log.Printf("Request %d: FAILED - Expected 200, got %d", i, rr.Code)
-		}
-	}
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	req.RemoteAddr = testIP + ":8080"
-	rr := httptest.NewRecorder()
-
-	handler.ServeHTTP(rr, req)
-
-	if rr.Code == http.StatusTooManyRequests {
-		log.Printf("Request 4: CORRECTLY RATE LIMITED (429)")
-		log.Printf("Headers: Limit=%s, Remaining=%s, Reset=%s",
-			rr.Header().Get("X-RateLimit-Limit"),
-			rr.Header().Get("X-RateLimit-Remaining"),
-			rr.Header().Get("X-RateLimit-Reset"))
-	} else {
-		log.Printf("Request 4: FAILED - Expected 429, got %d", rr.Code)
-	}
-
-	log.Println("Rate limiting test completed")
 }

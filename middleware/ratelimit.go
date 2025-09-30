@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -40,10 +41,10 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 		// Check if over limit
 		if len(validRequests) >= rl.limit {
 			resetTime := now.Add(rl.window)
-			w.Header().Set("X-RateLimit-Limit", string(rune(rl.limit)))
+			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(rl.limit))
 			w.Header().Set("X-RateLimit-Remaining", "0")
 			w.Header().Set("X-RateLimit-Reset", resetTime.Format(time.RFC1123))
-			w.Header().Set("Retry-After", string(rune(rl.window/time.Second)))
+			w.Header().Set("Retry-After", strconv.Itoa(int(rl.window/time.Second)))
 
 			http.Error(w, "Rate limit exceeded. Too many requests.", http.StatusTooManyRequests)
 			return
@@ -55,8 +56,8 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 
 		// Set rate limit headers
 		remaining := rl.limit - len(validRequests)
-		w.Header().Set("X-RateLimit-Limit", string(rune(rl.limit)))
-		w.Header().Set("X-RateLimit-Remaining", string(rune(remaining)))
+		w.Header().Set("X-RateLimit-Limit", strconv.Itoa(rl.limit))
+		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
 		w.Header().Set("X-RateLimit-Reset", now.Add(rl.window).Format(time.RFC1123))
 
 		next.ServeHTTP(w, r)
