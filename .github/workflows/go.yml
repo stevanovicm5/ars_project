@@ -13,6 +13,17 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    services:
+      consul:
+        image: consul:1.15.4
+        ports:
+          - 8500:8500
+        options: >-
+          --health-cmd "curl -f http://localhost:8500/v1/status/leader || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
     - uses: actions/checkout@v4
 
@@ -20,6 +31,14 @@ jobs:
       uses: actions/setup-go@v4
       with:
         go-version: '1.25.1'
+
+    - name: Wait for Consul to be ready
+      run: |
+        until curl -s http://localhost:8500/v1/status/leader | grep -q :8300; do
+          echo "Waiting for Consul to start..."
+          sleep 5
+        done
+        echo "Consul is ready!"
 
     - name: Build
       run: go build -v ./...
