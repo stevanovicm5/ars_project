@@ -4,10 +4,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestRateLimiter_WithinLimit(t *testing.T) {
-	limiter := NewRateLimiter(3, 60)
+	limiter := NewRateLimiter(3, time.Minute)
 	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	}))
@@ -25,14 +26,17 @@ func TestRateLimiter_WithinLimit(t *testing.T) {
 }
 
 func TestRateLimiter_ExceedsLimit(t *testing.T) {
-	limiter := NewRateLimiter(2, 60)
+	limiter := NewRateLimiter(2, time.Minute)
 	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	}))
 
+	// Use unique IP for this test
+	testIP := "192.168.1.100:8080"
+
 	for i := 1; i <= 2; i++ {
 		req := httptest.NewRequest("GET", "/test", nil)
-		req.RemoteAddr = "192.168.1.1:8080"
+		req.RemoteAddr = testIP
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
 
@@ -41,8 +45,9 @@ func TestRateLimiter_ExceedsLimit(t *testing.T) {
 		}
 	}
 
+	// Third request - should be rate limited
 	req := httptest.NewRequest("GET", "/test", nil)
-	req.RemoteAddr = "192.168.1.1:8080"
+	req.RemoteAddr = testIP
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -50,19 +55,18 @@ func TestRateLimiter_ExceedsLimit(t *testing.T) {
 		t.Errorf("Third request should be rate limited, got %d", rr.Code)
 	}
 
-	// Verify rate limit headers
 	if rr.Header().Get("X-RateLimit-Remaining") != "0" {
 		t.Errorf("Expected X-RateLimit-Remaining to be 0, got %s", rr.Header().Get("X-RateLimit-Remaining"))
 	}
 }
 
 func TestRateLimiter_DifferentIPs(t *testing.T) {
-	limiter := NewRateLimiter(1, 60) // 1 request per minute per IP
+	limiter := NewRateLimiter(1, time.Minute)
 	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	}))
 
-	// First IP - should work
+	// First IP
 	req1 := httptest.NewRequest("GET", "/test", nil)
 	req1.RemoteAddr = "192.168.1.1:8080"
 	rr1 := httptest.NewRecorder()
@@ -72,7 +76,7 @@ func TestRateLimiter_DifferentIPs(t *testing.T) {
 		t.Errorf("First IP request should succeed, got %d", rr1.Code)
 	}
 
-	// Different IP - should also work (different limit)
+	// Different IP
 	req2 := httptest.NewRequest("GET", "/test", nil)
 	req2.RemoteAddr = "192.168.1.2:8080"
 	rr2 := httptest.NewRecorder()
