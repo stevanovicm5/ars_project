@@ -2,16 +2,16 @@ package repository
 
 import (
 	"alati_projekat/model"
-	"context" // NOVI IMPORT
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/hashicorp/consul/api"
-	"go.opentelemetry.io/otel"           // NOVI IMPORT
-	"go.opentelemetry.io/otel/attribute" // NOVI IMPORT
-	"go.opentelemetry.io/otel/codes"     // NOVI IMPORT
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 const (
@@ -19,7 +19,6 @@ const (
 	GroupsPrefix  = "configgroups/"
 )
 
-// Pomoćna funkcija za kreiranje Tracera
 var tracer = otel.Tracer("consul-repository-tracer")
 
 type ConsulRepository struct {
@@ -27,7 +26,6 @@ type ConsulRepository struct {
 }
 
 func NewConsulRepository(addr string) (*ConsulRepository, error) {
-
 	config := api.DefaultConfig()
 	config.Address = addr
 
@@ -41,13 +39,12 @@ func NewConsulRepository(addr string) (*ConsulRepository, error) {
 	}, nil
 }
 
-// Pomoćna funkcija za kreiranje ključa (ostavljam Vašu originalnu logiku)
 func makeKey(name, version string) string {
 	return fmt.Sprintf("%s/%s", name, version)
 }
 
-// CONFIGURATIONS
-// ADD
+// ---------------------- CONFIGURATIONS ----------------------
+
 func (r *ConsulRepository) AddConfiguration(ctx context.Context, config model.Configuration) (err error) {
 	ctx, span := tracer.Start(ctx, "AddConfiguration")
 	defer func() {
@@ -59,7 +56,6 @@ func (r *ConsulRepository) AddConfiguration(ctx context.Context, config model.Co
 	span.SetAttributes(attribute.String("config.name", config.Name), attribute.String("config.version", config.Version))
 
 	key := ConfigsPrefix + makeKey(config.Name, config.Version)
-
 	data, err := json.Marshal(config)
 	if err != nil {
 		return fmt.Errorf("failed to serialize configuration: %w", err)
@@ -67,9 +63,9 @@ func (r *ConsulRepository) AddConfiguration(ctx context.Context, config model.Co
 
 	p := &api.KVPair{Key: key, Value: data}
 
-	// Koristimo r.Client, ali ne prosleđujemo ctx jer Consul API ne podržava direktno prosleđivanje Go konteksta u Get/Put metodama
-	// Ipak, Span je kreiran i biće završen, a roditelj Span (iz Service sloja) će prikupiti ovo vreme.
-	_, err = r.Client.KV().Put(p, nil)
+	writeOptions := (&api.WriteOptions{}).WithContext(ctx)
+
+	_, err = r.Client.KV().Put(p, writeOptions)
 	if err != nil {
 		return fmt.Errorf("failed to put configuration into Consul: %w", err)
 	}
@@ -77,7 +73,6 @@ func (r *ConsulRepository) AddConfiguration(ctx context.Context, config model.Co
 	return nil
 }
 
-// GET
 func (r *ConsulRepository) GetConfiguration(ctx context.Context, name, version string) (config model.Configuration, err error) {
 	ctx, span := tracer.Start(ctx, "GetConfiguration")
 	defer func() {
@@ -90,7 +85,9 @@ func (r *ConsulRepository) GetConfiguration(ctx context.Context, name, version s
 
 	key := ConfigsPrefix + makeKey(name, version)
 
-	pair, _, err := r.Client.KV().Get(key, nil)
+	queryOptions := (&api.QueryOptions{}).WithContext(ctx)
+
+	pair, _, err := r.Client.KV().Get(key, queryOptions)
 	if err != nil {
 		return model.Configuration{}, fmt.Errorf("failed to get configuration from Consul: %w", err)
 	}
@@ -106,7 +103,6 @@ func (r *ConsulRepository) GetConfiguration(ctx context.Context, name, version s
 	return config, nil
 }
 
-// UPDATE
 func (r *ConsulRepository) UpdateConfiguration(ctx context.Context, config model.Configuration) (err error) {
 	ctx, span := tracer.Start(ctx, "UpdateConfiguration")
 	defer func() {
@@ -117,7 +113,6 @@ func (r *ConsulRepository) UpdateConfiguration(ctx context.Context, config model
 	}()
 	span.SetAttributes(attribute.String("config.name", config.Name), attribute.String("config.version", config.Version))
 
-	// Proveravamo postojanje pre update-a. Prosleđujemo ctx!
 	if _, err := r.GetConfiguration(ctx, config.Name, config.Version); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return errors.New("configuration not found for update")
@@ -126,14 +121,16 @@ func (r *ConsulRepository) UpdateConfiguration(ctx context.Context, config model
 	}
 
 	key := ConfigsPrefix + makeKey(config.Name, config.Version)
-
 	data, err := json.Marshal(config)
 	if err != nil {
 		return fmt.Errorf("failed to serialize configuration for update: %w", err)
 	}
 
 	p := &api.KVPair{Key: key, Value: data}
-	_, err = r.Client.KV().Put(p, nil)
+
+	writeOptions := (&api.WriteOptions{}).WithContext(ctx)
+
+	_, err = r.Client.KV().Put(p, writeOptions)
 	if err != nil {
 		return fmt.Errorf("failed to update configuration in Consul: %w", err)
 	}
@@ -141,7 +138,6 @@ func (r *ConsulRepository) UpdateConfiguration(ctx context.Context, config model
 	return nil
 }
 
-// DELETE
 func (r *ConsulRepository) DeleteConfiguration(ctx context.Context, name, version string) (err error) {
 	ctx, span := tracer.Start(ctx, "DeleteConfiguration")
 	defer func() {
@@ -154,7 +150,9 @@ func (r *ConsulRepository) DeleteConfiguration(ctx context.Context, name, versio
 
 	key := ConfigsPrefix + makeKey(name, version)
 
-	_, err = r.Client.KV().Delete(key, nil)
+	writeOptions := (&api.WriteOptions{}).WithContext(ctx)
+
+	_, err = r.Client.KV().Delete(key, writeOptions)
 	if err != nil {
 		return fmt.Errorf("failed to delete configuration from Consul: %w", err)
 	}
@@ -162,8 +160,8 @@ func (r *ConsulRepository) DeleteConfiguration(ctx context.Context, name, versio
 	return nil
 }
 
-// CONFIGURATION GROUPS
-// ADD
+// ---------------------- CONFIGURATION GROUPS ----------------------
+
 func (r *ConsulRepository) AddConfigurationGroup(ctx context.Context, group model.ConfigurationGroup) (err error) {
 	ctx, span := tracer.Start(ctx, "AddConfigurationGroup")
 	defer func() {
@@ -175,7 +173,6 @@ func (r *ConsulRepository) AddConfigurationGroup(ctx context.Context, group mode
 	span.SetAttributes(attribute.String("group.name", group.Name), attribute.String("group.version", group.Version))
 
 	key := GroupsPrefix + makeKey(group.Name, group.Version)
-
 	data, err := json.Marshal(group)
 	if err != nil {
 		return fmt.Errorf("failed to serialize configuration group: %w", err)
@@ -183,7 +180,9 @@ func (r *ConsulRepository) AddConfigurationGroup(ctx context.Context, group mode
 
 	p := &api.KVPair{Key: key, Value: data}
 
-	_, err = r.Client.KV().Put(p, nil)
+	writeOptions := (&api.WriteOptions{}).WithContext(ctx)
+
+	_, err = r.Client.KV().Put(p, writeOptions)
 	if err != nil {
 		return fmt.Errorf("failed to put configuration group into Consul: %w", err)
 	}
@@ -191,7 +190,6 @@ func (r *ConsulRepository) AddConfigurationGroup(ctx context.Context, group mode
 	return nil
 }
 
-// GET
 func (r *ConsulRepository) GetConfigurationGroup(ctx context.Context, name, version string) (group model.ConfigurationGroup, err error) {
 	ctx, span := tracer.Start(ctx, "GetConfigurationGroup")
 	defer func() {
@@ -204,7 +202,9 @@ func (r *ConsulRepository) GetConfigurationGroup(ctx context.Context, name, vers
 
 	key := GroupsPrefix + makeKey(name, version)
 
-	pair, _, err := r.Client.KV().Get(key, nil)
+	queryOptions := (&api.QueryOptions{}).WithContext(ctx)
+
+	pair, _, err := r.Client.KV().Get(key, queryOptions)
 	if err != nil {
 		return model.ConfigurationGroup{}, fmt.Errorf("failed to get configuration group from Consul: %w", err)
 	}
@@ -220,7 +220,6 @@ func (r *ConsulRepository) GetConfigurationGroup(ctx context.Context, name, vers
 	return group, nil
 }
 
-// UPDATE
 func (r *ConsulRepository) UpdateConfigurationGroup(ctx context.Context, group model.ConfigurationGroup) (err error) {
 	ctx, span := tracer.Start(ctx, "UpdateConfigurationGroup")
 	defer func() {
@@ -231,7 +230,6 @@ func (r *ConsulRepository) UpdateConfigurationGroup(ctx context.Context, group m
 	}()
 	span.SetAttributes(attribute.String("group.name", group.Name), attribute.String("group.version", group.Version))
 
-	// Proveravamo postojanje pre update-a. Prosleđujemo ctx!
 	if _, err := r.GetConfigurationGroup(ctx, group.Name, group.Version); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return errors.New("configuration group not found for update")
@@ -240,14 +238,16 @@ func (r *ConsulRepository) UpdateConfigurationGroup(ctx context.Context, group m
 	}
 
 	key := GroupsPrefix + makeKey(group.Name, group.Version)
-
 	data, err := json.Marshal(group)
 	if err != nil {
 		return fmt.Errorf("failed to serialize configuration group for update: %w", err)
 	}
 
 	p := &api.KVPair{Key: key, Value: data}
-	_, err = r.Client.KV().Put(p, nil)
+
+	writeOptions := (&api.WriteOptions{}).WithContext(ctx)
+
+	_, err = r.Client.KV().Put(p, writeOptions)
 	if err != nil {
 		return fmt.Errorf("failed to update configuration group in Consul: %w", err)
 	}
@@ -255,7 +255,6 @@ func (r *ConsulRepository) UpdateConfigurationGroup(ctx context.Context, group m
 	return nil
 }
 
-// DELETE
 func (r *ConsulRepository) DeleteConfigurationGroup(ctx context.Context, name, version string) (err error) {
 	ctx, span := tracer.Start(ctx, "DeleteConfigurationGroup")
 	defer func() {
@@ -268,13 +267,17 @@ func (r *ConsulRepository) DeleteConfigurationGroup(ctx context.Context, name, v
 
 	key := GroupsPrefix + makeKey(name, version)
 
-	_, err = r.Client.KV().Delete(key, nil)
+	writeOptions := (&api.WriteOptions{}).WithContext(ctx)
+
+	_, err = r.Client.KV().Delete(key, writeOptions)
 	if err != nil {
 		return fmt.Errorf("failed to delete configuration group from Consul: %w", err)
 	}
 
 	return nil
 }
+
+// ---------------------- IDEMPOTENCY ----------------------
 
 const IdempotencyPrefix = "idempotency/"
 
@@ -289,7 +292,10 @@ func (r *ConsulRepository) CheckIdempotencyKey(ctx context.Context, key string) 
 	span.SetAttributes(attribute.String("idempotency.key", key))
 
 	fullKey := IdempotencyPrefix + key
-	pair, _, err := r.Client.KV().Get(fullKey, nil)
+
+	queryOptions := (&api.QueryOptions{}).WithContext(ctx)
+
+	pair, _, err := r.Client.KV().Get(fullKey, queryOptions)
 	if err != nil {
 		return false, fmt.Errorf("consul check failed: %w", err)
 	}
@@ -309,7 +315,9 @@ func (r *ConsulRepository) SaveIdempotencyKey(ctx context.Context, key string) (
 	fullKey := IdempotencyPrefix + key
 	p := &api.KVPair{Key: fullKey, Value: []byte("processed")}
 
-	_, err = r.Client.KV().Put(p, nil)
+	writeOptions := (&api.WriteOptions{}).WithContext(ctx)
+
+	_, err = r.Client.KV().Put(p, writeOptions)
 	if err != nil {
 		return fmt.Errorf("failed to save idempotency key to Consul: %w", err)
 	}

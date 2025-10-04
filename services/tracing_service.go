@@ -22,7 +22,6 @@ func NewTracingService(next Service) *TracingService {
 	}
 }
 
-// Pomoćna funkcija za postavljanje Error Statusa
 func endSpan(span trace.Span, err error) {
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
@@ -46,11 +45,12 @@ func (s *TracingService) GetConfiguration(ctx context.Context, name string, vers
 	return s.Next.GetConfiguration(ctx, name, version)
 }
 
-func (s *TracingService) UpdateConfiguration(ctx context.Context, config model.Configuration, idempotencyKey string) (err error) {
+func (s *TracingService) UpdateConfiguration(ctx context.Context, config model.Configuration, idempotencyKey string) (out model.Configuration, err error) {
 	ctx, span := tracer.Start(ctx, "UpdateConfigurationService")
 	defer endSpan(span, err)
 	span.SetAttributes(attribute.String("config.name", config.Name), attribute.String("config.version", config.Version))
-	return s.Next.UpdateConfiguration(ctx, config, idempotencyKey)
+	out, err = s.Next.UpdateConfiguration(ctx, config, idempotencyKey)
+	return out, err
 }
 
 func (s *TracingService) DeleteConfiguration(ctx context.Context, name string, version string) (err error) {
@@ -76,11 +76,12 @@ func (s *TracingService) GetConfigurationGroup(ctx context.Context, name string,
 	return s.Next.GetConfigurationGroup(ctx, name, version)
 }
 
-func (s *TracingService) UpdateConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) (err error) {
+func (s *TracingService) UpdateConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) (out model.ConfigurationGroup, err error) {
 	ctx, span := tracer.Start(ctx, "UpdateConfigurationGroupService")
 	defer endSpan(span, err)
 	span.SetAttributes(attribute.String("group.name", group.Name), attribute.String("group.version", group.Version))
-	return s.Next.UpdateConfigurationGroup(ctx, group, idempotencyKey)
+	out, err = s.Next.UpdateConfigurationGroup(ctx, group, idempotencyKey)
+	return out, err
 }
 
 func (s *TracingService) DeleteConfigurationGroup(ctx context.Context, name string, version string) (err error) {
@@ -94,7 +95,7 @@ func (s *TracingService) DeleteConfigurationGroup(ctx context.Context, name stri
 
 func (s *TracingService) CheckIdempotencyKey(ctx context.Context, key string) (bool, error) {
 	ctx, span := tracer.Start(ctx, "CheckIdempotencyKeyService")
-	defer span.End() // Ne treba nam endSpan jer ova funkcija nema grešku u potpisu
+	defer span.End()
 	span.SetAttributes(attribute.String("idempotency.key", key))
 	return s.Next.CheckIdempotencyKey(ctx, key)
 }

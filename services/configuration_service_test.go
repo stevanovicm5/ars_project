@@ -62,9 +62,16 @@ func (m *MockRepository) GetConfiguration(ctx context.Context, name, version str
 
 func (m *MockRepository) UpdateConfiguration(ctx context.Context, config model.Configuration) error {
 	key := m.makeConfigKey(config.Name, config.Version)
-	if _, exists := m.configs[key]; !exists {
+
+	originalConfig, exists := m.configs[key]
+	if !exists {
 		return errors.New("configuration not found")
 	}
+
+	if config.ID == uuid.Nil {
+		config.ID = originalConfig.ID
+	}
+
 	m.configs[key] = config
 	return nil
 }
@@ -98,9 +105,16 @@ func (m *MockRepository) GetConfigurationGroup(ctx context.Context, name, versio
 
 func (m *MockRepository) UpdateConfigurationGroup(ctx context.Context, group model.ConfigurationGroup) error {
 	key := m.makeGroupKey(group.Name, group.Version)
-	if _, exists := m.groups[key]; !exists {
+	originalGroup, exists := m.groups[key]
+
+	if !exists {
 		return errors.New("configuration group not found")
 	}
+
+	if group.ID == uuid.Nil {
+		group.ID = originalGroup.ID
+	}
+
 	m.groups[key] = group
 	return nil
 }
@@ -127,13 +141,11 @@ func TestConfigurationService_AddConfiguration(t *testing.T) {
 		Params:  []model.Parameter{{Key: "port", Value: "8080"}},
 	}
 
-	// Test successful add
 	err := service.AddConfiguration(ctx, config, "test-key-1")
 	if err != nil {
 		t.Fatalf("AddConfiguration failed: %v", err)
 	}
 
-	// Verify idempotency key was saved
 	found, err := service.CheckIdempotencyKey(ctx, "test-key-1")
 	if err != nil {
 		t.Fatalf("CheckIdempotencyKey failed: %v", err)
@@ -142,7 +154,6 @@ func TestConfigurationService_AddConfiguration(t *testing.T) {
 		t.Error("Idempotency key should have been saved")
 	}
 
-	// Test duplicate add
 	err = service.AddConfiguration(ctx, config, "test-key-2")
 	if err == nil {
 		t.Error("Expected error for duplicate configuration")
@@ -154,7 +165,6 @@ func TestConfigurationService_GetConfiguration(t *testing.T) {
 	service := NewConfigurationService(mockRepo)
 	ctx := context.Background()
 
-	// First add a configuration
 	config := model.Configuration{
 		ID:      uuid.New(),
 		Name:    "get-test",
@@ -167,7 +177,6 @@ func TestConfigurationService_GetConfiguration(t *testing.T) {
 		t.Fatalf("Setup failed: %v", err)
 	}
 
-	// Test successful get
 	retrieved, err := service.GetConfiguration(ctx, "get-test", "v1.0.0")
 	if err != nil {
 		t.Fatalf("GetConfiguration failed: %v", err)
@@ -177,7 +186,6 @@ func TestConfigurationService_GetConfiguration(t *testing.T) {
 		t.Errorf("Expected name 'get-test', got '%s'", retrieved.Name)
 	}
 
-	// Test get non-existent
 	_, err = service.GetConfiguration(ctx, "non-existent", "v1.0.0")
 	if err == nil {
 		t.Error("Expected error for non-existent configuration")
@@ -189,9 +197,9 @@ func TestConfigurationService_UpdateConfiguration(t *testing.T) {
 	service := NewConfigurationService(mockRepo)
 	ctx := context.Background()
 
-	// First add a configuration
+	originalID := uuid.New()
 	config := model.Configuration{
-		ID:      uuid.New(),
+		ID:      originalID,
 		Name:    "update-test",
 		Version: "v1.0.0",
 		Params:  []model.Parameter{{Key: "old", Value: "value"}},
@@ -202,16 +210,22 @@ func TestConfigurationService_UpdateConfiguration(t *testing.T) {
 		t.Fatalf("Setup failed: %v", err)
 	}
 
-	// Test successful update
-	updatedConfig := config
-	updatedConfig.Params = []model.Parameter{{Key: "new", Value: "updated-value"}}
+	updatedConfigInput := config
+	updatedConfigInput.ID = uuid.Nil
+	updatedConfigInput.Params = []model.Parameter{{Key: "new", Value: "updated-value"}}
 
-	err = service.UpdateConfiguration(ctx, updatedConfig, "update-test-key-2")
+	retConfig, err := service.UpdateConfiguration(ctx, updatedConfigInput, "update-test-key-2")
 	if err != nil {
 		t.Fatalf("UpdateConfiguration failed: %v", err)
 	}
 
-	// Verify idempotency key was saved
+	if retConfig.ID != originalID {
+		t.Errorf("Expected ID %s, but got ID %s in the returned configuration", originalID, retConfig.ID)
+	}
+	if len(retConfig.Params) != 1 || retConfig.Params[0].Key != "new" {
+		t.Error("Returned configuration was not properly updated")
+	}
+
 	found, err := service.CheckIdempotencyKey(ctx, "update-test-key-2")
 	if err != nil {
 		t.Fatalf("CheckIdempotencyKey failed: %v", err)
@@ -220,14 +234,61 @@ func TestConfigurationService_UpdateConfiguration(t *testing.T) {
 		t.Error("Idempotency key should have been saved for update")
 	}
 
-	// Verify update
-	retrieved, err := service.GetConfiguration(ctx, "update-test", "v1.0.0")
-	if err != nil {
-		t.Fatalf("Get after update failed: %v", err)
+	nonExistentConfig := model.Configuration{Name: "non-exist", Version: "v1"}
+	_, err = service.UpdateConfiguration(ctx, nonExistentConfig, "update-test-key-3")
+	if err == nil {
+		t.Error("Expected error for updating non-existent configuration")
+	}
+}
+
+func TestConfigurationService_UpdateConfigurationGroup(t *testing.T) {
+	mockRepo := NewMockRepository()
+	service := NewConfigurationService(mockRepo)
+	ctx := context.Background()
+
+	originalID := uuid.New()
+	originalConfig := model.Configuration{Params: []model.Parameter{{Key: "old", Value: "old-value"}}}
+	group := model.ConfigurationGroup{
+		ID:             originalID,
+		Name:           "update-group-test",
+		Version:        "v1.0.0",
+		Configurations: []model.Configuration{originalConfig},
 	}
 
-	if len(retrieved.Params) != 1 || retrieved.Params[0].Key != "new" {
-		t.Error("Configuration was not properly updated")
+	err := service.AddConfigurationGroup(ctx, group, "update-group-key-1")
+	if err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+
+	updatedConfig := model.Configuration{Params: []model.Parameter{{Key: "new", Value: "updated-value"}}}
+	updatedGroupInput := group
+	updatedGroupInput.ID = uuid.Nil
+	updatedGroupInput.Configurations = []model.Configuration{updatedConfig}
+
+	retGroup, err := service.UpdateConfigurationGroup(ctx, updatedGroupInput, "update-group-key-2")
+	if err != nil {
+		t.Fatalf("UpdateConfigurationGroup failed: %v", err)
+	}
+
+	if retGroup.ID != originalID {
+		t.Errorf("Expected ID %s, but got ID %s in the returned group", originalID, retGroup.ID)
+	}
+	if len(retGroup.Configurations) != 1 || len(retGroup.Configurations[0].Params) != 1 || retGroup.Configurations[0].Params[0].Key != "new" {
+		t.Errorf("Returned configuration group was not properly updated. Expected Key: 'new', got: %v", retGroup.Configurations[0].Params)
+	}
+
+	found, err := service.CheckIdempotencyKey(ctx, "update-group-key-2")
+	if err != nil {
+		t.Fatalf("CheckIdempotencyKey failed: %v", err)
+	}
+	if !found {
+		t.Error("Idempotency key should have been saved for group update")
+	}
+
+	nonExistentGroup := model.ConfigurationGroup{Name: "non-exist-group", Version: "v1"}
+	_, err = service.UpdateConfigurationGroup(ctx, nonExistentGroup, "update-group-key-3")
+	if err == nil {
+		t.Error("Expected error for updating non-existent group")
 	}
 }
 
@@ -236,7 +297,6 @@ func TestConfigurationService_Idempotency(t *testing.T) {
 	service := NewConfigurationService(mockRepo)
 	ctx := context.Background()
 
-	// Test checking non-existent key
 	found, err := service.CheckIdempotencyKey(ctx, "non-existent-key")
 	if err != nil {
 		t.Fatalf("CheckIdempotencyKey failed: %v", err)
@@ -245,7 +305,6 @@ func TestConfigurationService_Idempotency(t *testing.T) {
 		t.Error("Non-existent key should not be found")
 	}
 
-	// Test saving empty key (should not panic)
 	service.SaveIdempotencyKey(ctx, "")
 }
 
@@ -274,7 +333,6 @@ func TestConfigurationService_ConfigurationGroup(t *testing.T) {
 		t.Fatalf("AddConfigurationGroup failed: %v", err)
 	}
 
-	// Test get group
 	retrieved, err := service.GetConfigurationGroup(ctx, "test-group", "v1.0.0")
 	if err != nil {
 		t.Fatalf("GetConfigurationGroup failed: %v", err)

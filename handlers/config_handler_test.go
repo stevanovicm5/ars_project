@@ -34,7 +34,6 @@ func (m *MockService) makeGroupKey(name, version string) string {
 	return name + ":" + version
 }
 
-// Service interface implementation
 func (m *MockService) CheckIdempotencyKey(ctx context.Context, key string) (bool, error) {
 	return false, nil
 }
@@ -59,13 +58,21 @@ func (m *MockService) GetConfiguration(ctx context.Context, name, version string
 	return config, nil
 }
 
-func (m *MockService) UpdateConfiguration(ctx context.Context, config model.Configuration, idempotencyKey string) error {
+func (m *MockService) UpdateConfiguration(ctx context.Context, config model.Configuration, idempotencyKey string) (model.Configuration, error) {
 	key := m.makeConfigKey(config.Name, config.Version)
-	if _, exists := m.configs[key]; !exists {
-		return errors.New("configuration not found")
+
+	originalConfig, exists := m.configs[key]
+	if !exists {
+		return model.Configuration{}, errors.New("configuration not found")
 	}
+
+	if config.ID == uuid.Nil {
+		config.ID = originalConfig.ID
+	}
+
 	m.configs[key] = config
-	return nil
+
+	return config, nil
 }
 
 func (m *MockService) DeleteConfiguration(ctx context.Context, name, version string) error {
@@ -74,15 +81,6 @@ func (m *MockService) DeleteConfiguration(ctx context.Context, name, version str
 		return errors.New("configuration not found")
 	}
 	delete(m.configs, key)
-	return nil
-}
-
-func (m *MockService) AddConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) error {
-	key := m.makeGroupKey(group.Name, group.Version)
-	if _, exists := m.groups[key]; exists {
-		return errors.New("configuration group already exists")
-	}
-	m.groups[key] = group
 	return nil
 }
 
@@ -95,13 +93,29 @@ func (m *MockService) GetConfigurationGroup(ctx context.Context, name, version s
 	return group, nil
 }
 
-func (m *MockService) UpdateConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) error {
+func (m *MockService) AddConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) error {
 	key := m.makeGroupKey(group.Name, group.Version)
-	if _, exists := m.groups[key]; !exists {
-		return errors.New("configuration group not found")
+	if _, exists := m.groups[key]; exists {
+		return errors.New("configuration group already exists")
 	}
 	m.groups[key] = group
 	return nil
+}
+
+func (m *MockService) UpdateConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) (model.ConfigurationGroup, error) {
+	key := m.makeGroupKey(group.Name, group.Version)
+	originalGroup, exists := m.groups[key]
+
+	if !exists {
+		return model.ConfigurationGroup{}, errors.New("configuration group not found")
+	}
+
+	if group.ID == uuid.Nil {
+		group.ID = originalGroup.ID
+	}
+
+	m.groups[key] = group
+	return group, nil
 }
 
 func (m *MockService) DeleteConfigurationGroup(ctx context.Context, name, version string) error {
@@ -150,7 +164,6 @@ func TestConfigHandler_AddConfiguration(t *testing.T) {
 		t.Errorf("Expected status 201, got %d", rr.Code)
 	}
 
-	// Verify response body
 	var response model.Configuration
 	err := json.NewDecoder(rr.Body).Decode(&response)
 	if err != nil {
@@ -166,7 +179,6 @@ func TestConfigHandler_AddConfiguration_BadRequest(t *testing.T) {
 	mockService := NewMockService()
 	handler := NewConfigHandler(mockService)
 
-	// Send invalid JSON
 	req := httptest.NewRequest("POST", "/configurations", bytes.NewReader([]byte("invalid json")))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -183,7 +195,6 @@ func TestConfigHandler_GetConfiguration(t *testing.T) {
 	mockService := NewMockService()
 	handler := NewConfigHandler(mockService)
 
-	// First add a configuration
 	config := model.Configuration{
 		ID:      uuid.New(),
 		Name:    "get-test",
@@ -226,7 +237,6 @@ func TestConfigHandler_GetConfiguration_MissingParams(t *testing.T) {
 		t.Errorf("Expected status 400 for missing name, got %d", rr.Code)
 	}
 
-	// Test missing version
 	req2 := httptest.NewRequest("GET", "/configurations?name=test", nil)
 	rr2 := httptest.NewRecorder()
 
@@ -240,10 +250,11 @@ func TestConfigHandler_GetConfiguration_MissingParams(t *testing.T) {
 func TestConfigHandler_UpdateConfiguration(t *testing.T) {
 	mockService := NewMockService()
 	handler := NewConfigHandler(mockService)
+	originalID := uuid.New()
 
 	// First add a configuration
 	config := model.Configuration{
-		ID:      uuid.New(),
+		ID:      originalID,
 		Name:    "update-test",
 		Version: "v1.0.0",
 		Params:  []model.Parameter{{Key: "old", Value: "value"}},
@@ -269,13 +280,26 @@ func TestConfigHandler_UpdateConfiguration(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", rr.Code)
 	}
+
+	var response model.Configuration
+	err := json.NewDecoder(rr.Body).Decode(&response)
+	if err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if response.ID != originalID {
+		t.Errorf("Expected original ID %s, got %s", originalID, response.ID)
+	}
+
+	if len(response.Params) != 1 || response.Params[0].Key != "new" {
+		t.Errorf("Handler did not return the updated configuration. Got params: %+v", response.Params)
+	}
 }
 
 func TestConfigHandler_DeleteConfiguration(t *testing.T) {
 	mockService := NewMockService()
 	handler := NewConfigHandler(mockService)
 
-	// First add a configuration
 	config := model.Configuration{
 		ID:      uuid.New(),
 		Name:    "delete-test",
@@ -298,7 +322,6 @@ func TestConfigHandler_WrongMethod(t *testing.T) {
 	mockService := NewMockService()
 	handler := NewConfigHandler(mockService)
 
-	// Test POST on GET endpoint
 	req := httptest.NewRequest("POST", "/configurations?name=test&version=v1.0.0", nil)
 	rr := httptest.NewRecorder()
 
@@ -348,5 +371,55 @@ func TestConfigHandler_AddConfigurationGroup(t *testing.T) {
 
 	if response.Name != "test-group" {
 		t.Errorf("Expected group name 'test-group', got '%s'", response.Name)
+	}
+}
+
+func TestConfigHandler_UpdateConfigurationGroup(t *testing.T) {
+	mockService := NewMockService()
+	handler := NewConfigHandler(mockService)
+	originalID := uuid.New()
+
+	originalConfig := model.Configuration{ID: uuid.New(), Params: []model.Parameter{{Key: "old", Value: "val"}}}
+	originalGroup := model.ConfigurationGroup{
+		ID:             originalID,
+		Name:           "update-group-test",
+		Version:        "v1.0.0",
+		Configurations: []model.Configuration{originalConfig},
+	}
+	mockService.groups["update-group-test:v1.0.0"] = originalGroup
+
+	updatedConfig := model.Configuration{ID: uuid.New(), Params: []model.Parameter{{Key: "new", Value: "updated"}}}
+	updateReq := model.CreateGroupRequest{
+		Name:           "update-group-test",
+		Version:        "v1.0.0",
+		Configurations: []model.Configuration{updatedConfig},
+	}
+
+	body, _ := json.Marshal(updateReq)
+
+	req := httptest.NewRequest("PUT", "/configgroups", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Request-Id", "group-update-uuid")
+
+	rr := httptest.NewRecorder()
+
+	handler.HandleUpdateConfigurationGroup(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	var response model.ConfigurationGroup
+	err := json.NewDecoder(rr.Body).Decode(&response)
+	if err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if response.ID != originalID {
+		t.Errorf("Expected original ID %s, got %s", originalID, response.ID)
+	}
+
+	if len(response.Configurations) != 1 || response.Configurations[0].Params[0].Key != "new" {
+		t.Errorf("Handler did not return the updated group. Got configs: %+v", response.Configurations)
 	}
 }
