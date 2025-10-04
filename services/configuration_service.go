@@ -49,12 +49,21 @@ func (s *ConfigurationService) GetConfiguration(ctx context.Context, name string
 	return s.Repo.GetConfiguration(ctx, name, version)
 }
 
-func (s *ConfigurationService) UpdateConfiguration(ctx context.Context, config model.Configuration, idempotencyKey string) error {
+func (s *ConfigurationService) UpdateConfiguration(ctx context.Context, config model.Configuration, idempotencyKey string) (model.Configuration, error) {
+
 	if err := s.Repo.UpdateConfiguration(ctx, config); err != nil {
-		return err
+		return model.Configuration{}, err
 	}
+
 	s.SaveIdempotencyKey(ctx, idempotencyKey)
-	return nil
+
+	updatedConfig, err := s.Repo.GetConfiguration(ctx, config.Name, config.Version)
+	if err != nil {
+		log.Printf("CRITICAL: Update succeeded but Get failed for %s/%s: %v", config.Name, config.Version, err)
+		return model.Configuration{}, err
+	}
+
+	return updatedConfig, nil
 }
 
 func (s *ConfigurationService) DeleteConfiguration(ctx context.Context, name string, version string) error {
@@ -75,12 +84,19 @@ func (s *ConfigurationService) GetConfigurationGroup(ctx context.Context, name s
 	return s.Repo.GetConfigurationGroup(ctx, name, version)
 }
 
-func (s *ConfigurationService) UpdateConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) error {
+func (s *ConfigurationService) UpdateConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) (model.ConfigurationGroup, error) {
 	if err := s.Repo.UpdateConfigurationGroup(ctx, group); err != nil {
-		return err
+		return model.ConfigurationGroup{}, err
 	}
 	s.SaveIdempotencyKey(ctx, idempotencyKey)
-	return nil
+
+	updatedGroup, err := s.Repo.GetConfigurationGroup(ctx, group.Name, group.Version)
+	if err != nil {
+		log.Printf("CRITICAL: Update succeeded but Get failed for group %s/%s: %v", group.Name, group.Version, err)
+		return model.ConfigurationGroup{}, err
+	}
+
+	return updatedGroup, nil
 }
 
 func (s *ConfigurationService) DeleteConfigurationGroup(ctx context.Context, name string, version string) error {
@@ -116,7 +132,6 @@ func (s *ConfigurationService) DeleteConfigsByLabels(ctx context.Context, name, 
 		filtered = append(filtered, cfg)
 	}
 	if deleted == 0 {
-		// nije greška – samo niko nije pogođen
 		return 0, nil
 	}
 	g.Configurations = filtered
