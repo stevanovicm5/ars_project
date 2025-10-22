@@ -31,8 +31,7 @@ func (im *IdempotencyMiddleware) Middleware(next http.Handler) http.Handler {
 		idempotencyKey := r.Header.Get("X-Request-Id")
 
 		if idempotencyKey == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("Error: X-Request-Id header (UUID) is necessary."))
+			next.ServeHTTP(w, r)
 			return
 		}
 
@@ -45,8 +44,14 @@ func (im *IdempotencyMiddleware) Middleware(next http.Handler) http.Handler {
 
 		if isProcessed {
 			log.Printf("IDEMPOTENCY HIT: Request with key %s already processed.", idempotencyKey)
-			w.WriteHeader(http.StatusCreated)
-			w.Write([]byte("Request already processed (Idempotent)."))
+
+			status := http.StatusConflict
+			if r.Method == http.MethodPut {
+				status = http.StatusOK
+			}
+
+			w.WriteHeader(status)
+			w.Write([]byte("Request already processed (Idempotent). Original response body is not stored/returned."))
 			return
 		}
 

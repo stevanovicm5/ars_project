@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"sync"
@@ -24,12 +25,12 @@ func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
 
 func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Println("RATE LIMITER EXECUTED for:", r.URL.Path)
 		clientIP := getClientIP(r)
 
 		rl.mutex.Lock()
 		defer rl.mutex.Unlock()
 
-		// Clean old requests
 		now := time.Now()
 		var validRequests []time.Time
 		for _, t := range rl.requests[clientIP] {
@@ -38,27 +39,36 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 			}
 		}
 
-		// Check if over limit
+		var resetTime int64
+		if len(validRequests) > 0 {
+
+			resetTime = now.Add(rl.window).Unix()
+		} else {
+			resetTime = now.Add(rl.window).Unix()
+		}
+
 		if len(validRequests) >= rl.limit {
-			resetTime := now.Add(rl.window)
 			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(rl.limit))
 			w.Header().Set("X-RateLimit-Remaining", "0")
-			w.Header().Set("X-RateLimit-Reset", resetTime.Format(time.RFC1123))
-			w.Header().Set("Retry-After", strconv.Itoa(int(rl.window/time.Second)))
+			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(resetTime, 10))
+
+			retryAfter := resetTime - time.Now().Unix()
+			if retryAfter < 0 {
+				retryAfter = 1
+			}
+			w.Header().Set("Retry-After", strconv.FormatInt(retryAfter, 10))
 
 			http.Error(w, "Rate limit exceeded. Too many requests.", http.StatusTooManyRequests)
 			return
 		}
 
-		// Add current request
 		validRequests = append(validRequests, now)
 		rl.requests[clientIP] = validRequests
 
-		// Set rate limit headers
 		remaining := rl.limit - len(validRequests)
 		w.Header().Set("X-RateLimit-Limit", strconv.Itoa(rl.limit))
 		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
-		w.Header().Set("X-RateLimit-Reset", now.Add(rl.window).Format(time.RFC1123))
+		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(resetTime, 10))
 
 		next.ServeHTTP(w, r)
 	})

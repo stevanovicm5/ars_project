@@ -347,7 +347,6 @@ func (h *ConfigHandler) HandleUpdateConfigurationGroup(w http.ResponseWriter, r 
 	}
 
 	groupToUpdate := model.ConfigurationGroup{
-		ID:             uuid.Nil,
 		Name:           req.Name,
 		Version:        req.Version,
 		Configurations: req.Configurations,
@@ -371,8 +370,6 @@ func (h *ConfigHandler) HandleUpdateConfigurationGroup(w http.ResponseWriter, r 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(finalGroup)
 }
-
-// NAPOMENA: Uklonjena je duplirana metoda HandleUpdateConfigurationGroup, koja je bila netačna.
 
 // HandleDeleteConfigurationGroup godoc
 // @Summary Briše grupu konfiguracija
