@@ -5,7 +5,9 @@ import (
 	"alati_projekat/model"
 	"alati_projekat/repository"
 	"context"
+	"errors"
 	"log"
+	"strings"
 )
 
 type ConfigurationService struct {
@@ -38,6 +40,12 @@ func (s *ConfigurationService) SaveIdempotencyKey(ctx context.Context, key strin
 // --- CONFIGURATION CRUD LOGIC  ---
 
 func (s *ConfigurationService) AddConfiguration(ctx context.Context, config model.Configuration, idempotencyKey string) error {
+	if _, err := s.Repo.GetConfiguration(ctx, config.Name, config.Version); err == nil {
+		return errors.New("configuration already exists (Conflict)")
+	} else if !strings.Contains(err.Error(), "not found") {
+		return err
+	}
+
 	if err := s.Repo.AddConfiguration(ctx, config); err != nil {
 		return err
 	}
@@ -50,20 +58,18 @@ func (s *ConfigurationService) GetConfiguration(ctx context.Context, name string
 }
 
 func (s *ConfigurationService) UpdateConfiguration(ctx context.Context, config model.Configuration, idempotencyKey string) (model.Configuration, error) {
+	existingConfig, err := s.Repo.GetConfiguration(ctx, config.Name, config.Version)
+	if err != nil {
+		return model.Configuration{}, err // Vraća "not found" ili drugu grešku
+	}
+
+	config.ID = existingConfig.ID
 
 	if err := s.Repo.UpdateConfiguration(ctx, config); err != nil {
 		return model.Configuration{}, err
 	}
-
 	s.SaveIdempotencyKey(ctx, idempotencyKey)
-
-	updatedConfig, err := s.Repo.GetConfiguration(ctx, config.Name, config.Version)
-	if err != nil {
-		log.Printf("CRITICAL: Update succeeded but Get failed for %s/%s: %v", config.Name, config.Version, err)
-		return model.Configuration{}, err
-	}
-
-	return updatedConfig, nil
+	return config, err
 }
 
 func (s *ConfigurationService) DeleteConfiguration(ctx context.Context, name string, version string) error {
@@ -73,6 +79,12 @@ func (s *ConfigurationService) DeleteConfiguration(ctx context.Context, name str
 // --- CONFIGURATION GROUP CRUD LOGIC
 
 func (s *ConfigurationService) AddConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) error {
+	if _, err := s.Repo.GetConfigurationGroup(ctx, group.Name, group.Version); err == nil {
+		return errors.New("configuration group already exists (Conflict)")
+	} else if !strings.Contains(err.Error(), "not found") {
+		return err
+	}
+
 	if err := s.Repo.AddConfigurationGroup(ctx, group); err != nil {
 		return err
 	}
@@ -85,18 +97,18 @@ func (s *ConfigurationService) GetConfigurationGroup(ctx context.Context, name s
 }
 
 func (s *ConfigurationService) UpdateConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) (model.ConfigurationGroup, error) {
+	existingGroup, err := s.Repo.GetConfigurationGroup(ctx, group.Name, group.Version)
+	if err != nil {
+		return model.ConfigurationGroup{}, err // Vraća "not found" ili drugu grešku
+	}
+
+	group.ID = existingGroup.ID
+
 	if err := s.Repo.UpdateConfigurationGroup(ctx, group); err != nil {
 		return model.ConfigurationGroup{}, err
 	}
 	s.SaveIdempotencyKey(ctx, idempotencyKey)
-
-	updatedGroup, err := s.Repo.GetConfigurationGroup(ctx, group.Name, group.Version)
-	if err != nil {
-		log.Printf("CRITICAL: Update succeeded but Get failed for group %s/%s: %v", group.Name, group.Version, err)
-		return model.ConfigurationGroup{}, err
-	}
-
-	return updatedGroup, nil
+	return group, err
 }
 
 func (s *ConfigurationService) DeleteConfigurationGroup(ctx context.Context, name string, version string) error {

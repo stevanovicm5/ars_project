@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/consul/api"
 	"go.opentelemetry.io/otel"
@@ -113,13 +112,6 @@ func (r *ConsulRepository) UpdateConfiguration(ctx context.Context, config model
 	}()
 	span.SetAttributes(attribute.String("config.name", config.Name), attribute.String("config.version", config.Version))
 
-	if _, err := r.GetConfiguration(ctx, config.Name, config.Version); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			return errors.New("configuration not found for update")
-		}
-		return err
-	}
-
 	key := ConfigsPrefix + makeKey(config.Name, config.Version)
 	data, err := json.Marshal(config)
 	if err != nil {
@@ -221,6 +213,7 @@ func (r *ConsulRepository) GetConfigurationGroup(ctx context.Context, name, vers
 }
 
 func (r *ConsulRepository) UpdateConfigurationGroup(ctx context.Context, group model.ConfigurationGroup) (err error) {
+
 	ctx, span := tracer.Start(ctx, "UpdateConfigurationGroup")
 	defer func() {
 		if err != nil {
@@ -229,13 +222,6 @@ func (r *ConsulRepository) UpdateConfigurationGroup(ctx context.Context, group m
 		span.End()
 	}()
 	span.SetAttributes(attribute.String("group.name", group.Name), attribute.String("group.version", group.Version))
-
-	if _, err := r.GetConfigurationGroup(ctx, group.Name, group.Version); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			return errors.New("configuration group not found for update")
-		}
-		return err
-	}
 
 	key := GroupsPrefix + makeKey(group.Name, group.Version)
 	data, err := json.Marshal(group)

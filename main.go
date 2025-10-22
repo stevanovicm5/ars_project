@@ -36,23 +36,20 @@ type application struct {
 func initTracer() *sdktrace.TracerProvider {
 	ctx := context.Background()
 
-	// 1. ČITANJE ENDPOINT-A IZ OKRUŽENJA (OTEL_EXPORTER_OTLP_ENDPOINT)
 	otlpEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	if otlpEndpoint == "" {
-		otlpEndpoint = "jaeger:4317" // Pad nazad (fallback)
+		otlpEndpoint = "jaeger:4317"
 	}
 
-	// AŽURIRANA LINIJA: Sada šaljemo endpoint kao opciju.
 	exporter, err := otlptracegrpc.New(
 		ctx,
 		otlptracegrpc.WithInsecure(),
-		otlptracegrpc.WithEndpoint(otlpEndpoint), // <-- KRITIČNA IZMENA
+		otlptracegrpc.WithEndpoint(otlpEndpoint),
 	)
 	if err != nil {
 		log.Fatalf("failed to create OTLP exporter: %v", err)
 	}
 
-	// ... Ostatak koda ostaje kao što smo ga poslednji put ispravili
 	serviceName := os.Getenv("OTEL_SERVICE_NAME")
 	if serviceName == "" {
 		serviceName = "configuration-service-default"
@@ -67,7 +64,6 @@ func initTracer() *sdktrace.TracerProvider {
 	if err != nil {
 		log.Fatalf("failed to create resource: %v", err)
 	}
-	// =========================================================================
 
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter),
@@ -80,7 +76,7 @@ func initTracer() *sdktrace.TracerProvider {
 	return tp
 }
 
-// @title  Configuration API
+// @title  Configuration API
 // @version 1.0
 // @description This is a configuration management API with idempotency support.
 // @termsOfService http://swagger.io/terms/
@@ -101,7 +97,6 @@ func main() {
 			log.Printf("Error shutting down tracer provider: %v", err)
 		}
 	}()
-	// =====================================
 
 	consulAddr := "http://consul:8500"
 
@@ -139,11 +134,11 @@ func main() {
 	}
 
 	router := setupRouter(app)
-
+	rateLimiter := middleware.NewRateLimiter(4, time.Minute)
 	port := ":8080"
 	srv := &http.Server{
 		Addr:         port,
-		Handler:      router,
+		Handler:      rateLimiter.Middleware(router),
 		IdleTimeout:  time.Minute,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
@@ -185,12 +180,14 @@ func setupRouter(app *application) *mux.Router {
 
 	configHandler := handlers.NewConfigHandler(app.Services)
 
-	rateLimiter := middleware.NewRateLimiter(100, time.Minute)
 	idempotencyMiddleware := middleware.NewIdempotencyMiddleware(app.Services)
 
 	apiRouter := router.PathPrefix("/").Subrouter()
+
+	// OVDE DODAJEMO NOVI HTTP METRICS MIDDLEWARE
+	apiRouter.Use(middleware.HTTPMetricsMiddleware)
+
 	apiRouter.Use(middleware.TracingMiddleware)
-	apiRouter.Use(rateLimiter.Middleware)
 	apiRouter.Use(idempotencyMiddleware.Middleware)
 
 	// Swagger
@@ -225,11 +222,11 @@ func setupRouter(app *application) *mux.Router {
 //
 // @Summary Health check
 // @Description Check if service is healthy
-// @Tags  health
-// @Accept  json
+// @Tags  health
+// @Accept  json
 // @Produce json
 // @Success 200 {object} map[string]string
-// @Router  /health [get]
+// @Router  /health [get]
 func (app *application) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
