@@ -186,35 +186,49 @@ func setupRouter(app *application) *mux.Router {
 	apiRouter.Use(middleware.TracingMiddleware)
 	apiRouter.Use(idempotencyMiddleware.Middleware)
 
-	// Swagger
-	staticSwaggerFiles := http.FileServer(http.Dir("./docs"))
-	apiRouter.PathPrefix("/swagger/static/").Handler(http.StripPrefix("/swagger/static/", staticSwaggerFiles))
-	apiRouter.PathPrefix("/swagger/").Handler(httpSwagger.Handler(
-		httpSwagger.URL("/swagger/static/swagger.json"),
+	// Swagger rute
+	router.PathPrefix("/swagger").Handler(httpSwagger.Handler(
+		httpSwagger.URL("/swagger/doc.json"),
 	)).Methods("GET")
+
+	apiRouter.HandleFunc("/swagger/doc.json", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "docs/swagger.json")
+	}).Methods("GET")
 
 	// Rate limiters
 	readLimiter := middleware.NewRateLimiter(middleware.ReadRateLimit.Limit, middleware.ReadRateLimit.Window)
 	writeLimiter := middleware.NewRateLimiter(middleware.WriteRateLimit.Limit, middleware.WriteRateLimit.Window)
-	// defaultLimiter := middleware.NewRateLimiter(middleware.DefaultRateLimit.Limit, middleware.DefaultRateLimit.Window)
 
 	// Configuration routes
 	configRouter := apiRouter.PathPrefix("/configurations").Subrouter()
+
+	// POST /configurations
 	configRouter.Handle("", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleAddConfiguration))).Methods("POST")
-	configRouter.Handle("", readLimiter.Middleware(http.HandlerFunc(configHandler.HandleGetConfiguration))).Methods("GET")
+	// PUT /configurations
 	configRouter.Handle("", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleUpdateConfiguration))).Methods("PUT")
-	configRouter.Handle("", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleDeleteConfiguration))).Methods("DELETE")
+
+	// GET /configurations/{name}/{version}
+	configRouter.Handle("/{name}/{version}", readLimiter.Middleware(http.HandlerFunc(configHandler.HandleGetConfiguration))).Methods("GET")
+	// DELETE /configurations/{name}/{version}
+	configRouter.Handle("/{name}/{version}", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleDeleteConfiguration))).Methods("DELETE")
 
 	// Config group routes
 	groupRouter := apiRouter.PathPrefix("/configgroups").Subrouter()
-	groupRouter.Handle("", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleAddConfigurationGroup))).Methods("POST")
-	groupRouter.Handle("", readLimiter.Middleware(http.HandlerFunc(configHandler.HandleGetConfigurationGroup))).Methods("GET")
-	groupRouter.Handle("", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleUpdateConfigurationGroup))).Methods("PUT")
-	groupRouter.Handle("", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleDeleteConfigurationGroup))).Methods("DELETE")
 
-	// Config label routes
-	groupRouter.Handle("/configurations", readLimiter.Middleware(http.HandlerFunc(configHandler.HandleGetGroupConfigsByLabels))).Methods("GET")
-	groupRouter.Handle("/configurations", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleDeleteGroupConfigsByLabels))).Methods("DELETE")
+	// POST /configgroups
+	groupRouter.Handle("", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleAddConfigurationGroup))).Methods("POST")
+	// PUT /configgroups
+	groupRouter.Handle("", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleUpdateConfigurationGroup))).Methods("PUT")
+
+	// GET /configgroups/{name}/{version}
+	groupRouter.Handle("/{name}/{version}", readLimiter.Middleware(http.HandlerFunc(configHandler.HandleGetConfigurationGroup))).Methods("GET")
+	// DELETE /configgroups/{name}/{version}
+	groupRouter.Handle("/{name}/{version}", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleDeleteConfigurationGroup))).Methods("DELETE")
+
+	// GET /configgroups/{name}/{version}/configurations
+	groupRouter.Handle("/{name}/{version}/configurations", readLimiter.Middleware(http.HandlerFunc(configHandler.HandleGetGroupConfigsByLabels))).Methods("GET")
+	// DELETE /configgroups/{name}/{version}/configurations
+	groupRouter.Handle("/{name}/{version}/configurations", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleDeleteGroupConfigsByLabels))).Methods("DELETE")
 
 	return router
 }
