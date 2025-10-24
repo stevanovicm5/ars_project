@@ -28,7 +28,16 @@ services:
     networks:
       - network
       
-  # NOVO: Jaeger servis za OpenTelemetry Tracing
+  consul-config-loader:
+    image: alpine/curl:latest 
+    container_name: ars_consul_loader
+    command: /bin/sh -c "sleep 5 && curl -X PUT -d 'MojPrviPodatak' http://consul:8500/v1/kv/config-service/test/kljuc1"
+    networks:
+      - network
+    depends_on:
+      - consul
+    
+    restart: "no" 
   jaeger:
     image: jaegertracing/all-in-one:latest
     container_name: ars_jaeger
