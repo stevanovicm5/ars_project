@@ -134,7 +134,8 @@ func main() {
 	}
 
 	router := setupRouter(app)
-	rateLimiter := middleware.NewRateLimiter(4, time.Minute)
+
+	rateLimiter := middleware.NewRateLimiter(80, time.Minute)
 	port := ":8080"
 	srv := &http.Server{
 		Addr:         port,
@@ -175,18 +176,13 @@ func setupRouter(app *application) *mux.Router {
 	router := mux.NewRouter()
 
 	router.Handle("/metrics", promhttp.Handler()).Methods("GET")
-
 	router.HandleFunc("/health", app.handleHealthCheck).Methods("GET")
 
 	configHandler := handlers.NewConfigHandler(app.Services)
-
 	idempotencyMiddleware := middleware.NewIdempotencyMiddleware(app.Services)
 
 	apiRouter := router.PathPrefix("/").Subrouter()
-
-	// OVDE DODAJEMO NOVI HTTP METRICS MIDDLEWARE
 	apiRouter.Use(middleware.HTTPMetricsMiddleware)
-
 	apiRouter.Use(middleware.TracingMiddleware)
 	apiRouter.Use(idempotencyMiddleware.Middleware)
 
@@ -197,23 +193,28 @@ func setupRouter(app *application) *mux.Router {
 		httpSwagger.URL("/swagger/static/swagger.json"),
 	)).Methods("GET")
 
+	// Rate limiters
+	readLimiter := middleware.NewRateLimiter(middleware.ReadRateLimit.Limit, middleware.ReadRateLimit.Window)
+	writeLimiter := middleware.NewRateLimiter(middleware.WriteRateLimit.Limit, middleware.WriteRateLimit.Window)
+	// defaultLimiter := middleware.NewRateLimiter(middleware.DefaultRateLimit.Limit, middleware.DefaultRateLimit.Window)
+
 	// Configuration routes
 	configRouter := apiRouter.PathPrefix("/configurations").Subrouter()
-	configRouter.HandleFunc("", configHandler.HandleAddConfiguration).Methods("POST")
-	configRouter.HandleFunc("", configHandler.HandleGetConfiguration).Methods("GET")
-	configRouter.HandleFunc("", configHandler.HandleUpdateConfiguration).Methods("PUT")
-	configRouter.HandleFunc("", configHandler.HandleDeleteConfiguration).Methods("DELETE")
+	configRouter.Handle("", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleAddConfiguration))).Methods("POST")
+	configRouter.Handle("", readLimiter.Middleware(http.HandlerFunc(configHandler.HandleGetConfiguration))).Methods("GET")
+	configRouter.Handle("", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleUpdateConfiguration))).Methods("PUT")
+	configRouter.Handle("", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleDeleteConfiguration))).Methods("DELETE")
 
 	// Config group routes
 	groupRouter := apiRouter.PathPrefix("/configgroups").Subrouter()
-	groupRouter.HandleFunc("", configHandler.HandleAddConfigurationGroup).Methods("POST")
-	groupRouter.HandleFunc("", configHandler.HandleGetConfigurationGroup).Methods("GET")
-	groupRouter.HandleFunc("", configHandler.HandleUpdateConfigurationGroup).Methods("PUT")
-	groupRouter.HandleFunc("", configHandler.HandleDeleteConfigurationGroup).Methods("DELETE")
+	groupRouter.Handle("", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleAddConfigurationGroup))).Methods("POST")
+	groupRouter.Handle("", readLimiter.Middleware(http.HandlerFunc(configHandler.HandleGetConfigurationGroup))).Methods("GET")
+	groupRouter.Handle("", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleUpdateConfigurationGroup))).Methods("PUT")
+	groupRouter.Handle("", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleDeleteConfigurationGroup))).Methods("DELETE")
 
-	//Config label routes
-	groupRouter.HandleFunc("/configurations", configHandler.HandleGetGroupConfigsByLabels).Methods("GET")
-	groupRouter.HandleFunc("/configurations", configHandler.HandleDeleteGroupConfigsByLabels).Methods("DELETE")
+	// Config label routes
+	groupRouter.Handle("/configurations", readLimiter.Middleware(http.HandlerFunc(configHandler.HandleGetGroupConfigsByLabels))).Methods("GET")
+	groupRouter.Handle("/configurations", writeLimiter.Middleware(http.HandlerFunc(configHandler.HandleDeleteGroupConfigsByLabels))).Methods("DELETE")
 
 	return router
 }
