@@ -203,7 +203,7 @@ func TestConfigHandler_GetConfiguration(t *testing.T) {
 	}
 	mockService.configs["get-test:v1.0.0"] = config
 
-	req := httptest.NewRequest("GET", "/configurations?name=get-test&version=v1.0.0", nil)
+	req := httptest.NewRequest("GET", "/configurations/get-test/v1.0.0", nil)
 	rr := httptest.NewRecorder()
 
 	handler.HandleGetConfiguration(rr, req)
@@ -227,21 +227,16 @@ func TestConfigHandler_GetConfiguration_MissingParams(t *testing.T) {
 	mockService := NewMockService()
 	handler := NewConfigHandler(mockService)
 
-	// Test missing name
-	req := httptest.NewRequest("GET", "/configurations?version=v1.0.0", nil)
+	req := httptest.NewRequest("GET", "/configurations//v1.0.0", nil)
 	rr := httptest.NewRecorder()
-
 	handler.HandleGetConfiguration(rr, req)
-
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("Expected status 400 for missing name, got %d", rr.Code)
 	}
 
-	req2 := httptest.NewRequest("GET", "/configurations?name=test", nil)
+	req2 := httptest.NewRequest("GET", "/configurations/test/", nil)
 	rr2 := httptest.NewRecorder()
-
 	handler.HandleGetConfiguration(rr2, req2)
-
 	if rr2.Code != http.StatusBadRequest {
 		t.Errorf("Expected status 400 for missing version, got %d", rr2.Code)
 	}
@@ -252,7 +247,6 @@ func TestConfigHandler_UpdateConfiguration(t *testing.T) {
 	handler := NewConfigHandler(mockService)
 	originalID := uuid.New()
 
-	// First add a configuration
 	config := model.Configuration{
 		ID:      originalID,
 		Name:    "update-test",
@@ -269,7 +263,7 @@ func TestConfigHandler_UpdateConfiguration(t *testing.T) {
 
 	body, _ := json.Marshal(updateReq)
 
-	req := httptest.NewRequest("PUT", "/configurations", bytes.NewReader(body))
+	req := httptest.NewRequest("PUT", "/configurations/update-test/v1.0.0", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Request-Id", "update-uuid")
 
@@ -308,7 +302,7 @@ func TestConfigHandler_DeleteConfiguration(t *testing.T) {
 	}
 	mockService.configs["delete-test:v1.0.0"] = config
 
-	req := httptest.NewRequest("DELETE", "/configurations?name=delete-test&version=v1.0.0", nil)
+	req := httptest.NewRequest("DELETE", "/configurations/delete-test/v1.0.0", nil)
 	rr := httptest.NewRecorder()
 
 	handler.HandleDeleteConfiguration(rr, req)
@@ -322,7 +316,7 @@ func TestConfigHandler_WrongMethod(t *testing.T) {
 	mockService := NewMockService()
 	handler := NewConfigHandler(mockService)
 
-	req := httptest.NewRequest("POST", "/configurations?name=test&version=v1.0.0", nil)
+	req := httptest.NewRequest("POST", "/configurations/test/v1.0.0", nil)
 	rr := httptest.NewRecorder()
 
 	handler.HandleGetConfiguration(rr, req)
@@ -397,7 +391,7 @@ func TestConfigHandler_UpdateConfigurationGroup(t *testing.T) {
 
 	body, _ := json.Marshal(updateReq)
 
-	req := httptest.NewRequest("PUT", "/configgroups", bytes.NewReader(body))
+	req := httptest.NewRequest("PUT", "/configgroups/update-group-test/v1.0.0", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Request-Id", "group-update-uuid")
 

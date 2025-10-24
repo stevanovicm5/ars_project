@@ -52,7 +52,7 @@ func (h *ConfigHandler) HandleAddConfiguration(w http.ResponseWriter, r *http.Re
 	var req model.CreateConfigurationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		span.SetAttributes(attribute.String("error.message", "Invalid request body"))
-		http.Error(w, "Invalid request body"+err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -74,7 +74,7 @@ func (h *ConfigHandler) HandleAddConfiguration(w http.ResponseWriter, r *http.Re
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(newConfig)
+	_ = json.NewEncoder(w).Encode(newConfig)
 }
 
 // HandleGetConfiguration godoc
@@ -101,23 +101,20 @@ func (h *ConfigHandler) HandleGetConfiguration(w http.ResponseWriter, r *http.Re
 	version := r.URL.Query().Get("version")
 
 	if name == "" || version == "" {
-		span.SetAttributes(attribute.String("error.message", "Missing query params"))
 		http.Error(w, "Query parameters 'name' and 'version' are required.", http.StatusBadRequest)
 		return
 	}
 
 	config, err := h.Service.GetConfiguration(ctx, name, version)
-
 	if err != nil {
 		log.Printf("Error retrieving config %s/%s: %v", name, version, err)
-		span.SetAttributes(attribute.String("error.message", "Config not found"))
 		http.Error(w, "Configuration not found.", http.StatusNotFound)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(config)
+	_ = json.NewEncoder(w).Encode(config)
 }
 
 // HandleUpdateConfiguration godoc
@@ -144,13 +141,11 @@ func (h *ConfigHandler) HandleUpdateConfiguration(w http.ResponseWriter, r *http
 
 	var req model.CreateConfigurationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		span.SetAttributes(attribute.String("error.message", "Invalid request body"))
 		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	configToUpdate := model.Configuration{
-		ID:      uuid.Nil,
 		Name:    req.Name,
 		Version: req.Version,
 		Params:  req.Params,
@@ -158,25 +153,19 @@ func (h *ConfigHandler) HandleUpdateConfiguration(w http.ResponseWriter, r *http
 	}
 
 	idempotencyKey := r.Header.Get("X-Request-Id")
-
 	finalConfig, err := h.Service.UpdateConfiguration(ctx, configToUpdate, idempotencyKey)
 
 	if err != nil {
-		span.SetAttributes(attribute.String("error.message", "Update failed"))
-
 		if strings.Contains(err.Error(), "not found") {
 			http.Error(w, "Configuration not found for update.", http.StatusNotFound)
 			return
 		}
-
-		log.Printf("Internal error updating configuration: %v", err)
 		http.Error(w, "Error updating configuration: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(finalConfig)
+	_ = json.NewEncoder(w).Encode(finalConfig)
 }
 
 // HandleDeleteConfiguration godoc
@@ -203,20 +192,16 @@ func (h *ConfigHandler) HandleDeleteConfiguration(w http.ResponseWriter, r *http
 	version := r.URL.Query().Get("version")
 
 	if name == "" || version == "" {
-		span.SetAttributes(attribute.String("error.message", "Missing query params"))
 		http.Error(w, "Query parameters 'name' and 'version' are required.", http.StatusBadRequest)
 		return
 	}
 
 	err := h.Service.DeleteConfiguration(ctx, name, version)
-
 	if err != nil {
-		span.SetAttributes(attribute.String("error.message", "Delete failed"))
 		if strings.Contains(err.Error(), "not found") {
 			http.Error(w, "Configuration not found for deletion.", http.StatusNotFound)
 			return
 		}
-		log.Printf("Error deleting config %s/%s: %v", name, version, err)
 		http.Error(w, "Internal server error during deletion.", http.StatusInternalServerError)
 		return
 	}
@@ -225,49 +210,6 @@ func (h *ConfigHandler) HandleDeleteConfiguration(w http.ResponseWriter, r *http
 }
 
 // --- CONFIGURATION GROUPS CRUD ---
-
-// HandleGetConfigurationGroup godoc
-// @Summary Vraća grupu konfiguracija po imenu i verziji
-// @Description Vraća specifičnu grupu konfiguracija.
-// @Tags configuration_groups
-// @Produce json
-// @Param  name query string true "Ime grupe konfiguracija"
-// @Param  version query string true "Verzija grupe konfiguracija"
-// @Success 200 {object} model.ConfigurationGroup
-// @Failure 400 {string} string "Missing query parameters"
-// @Failure 404 {string} string "Configuration group not found"
-// @Router  /configgroups [get]
-func (h *ConfigHandler) HandleGetConfigurationGroup(w http.ResponseWriter, r *http.Request) {
-	ctx, span := tracer.Start(r.Context(), "HandleGetConfigurationGroup")
-	defer span.End()
-
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	name := r.URL.Query().Get("name")
-	version := r.URL.Query().Get("version")
-
-	if name == "" || version == "" {
-		span.SetAttributes(attribute.String("error.message", "Missing query params"))
-		http.Error(w, "Query parameters 'name' and 'version' are required.", http.StatusBadRequest)
-		return
-	}
-
-	group, err := h.Service.GetConfigurationGroup(ctx, name, version)
-
-	if err != nil {
-		log.Printf("Error retrieving config group %s/%s: %v", name, version, err)
-		span.SetAttributes(attribute.String("error.message", "Config group not found"))
-		http.Error(w, "Configuration group not found.", http.StatusNotFound)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(group)
-}
 
 // HandleAddConfigurationGroup godoc
 // @Summary Dodaje novu grupu konfiguracija
@@ -292,7 +234,6 @@ func (h *ConfigHandler) HandleAddConfigurationGroup(w http.ResponseWriter, r *ht
 
 	var req model.CreateGroupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		span.SetAttributes(attribute.String("error.message", "Invalid request body"))
 		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -305,16 +246,57 @@ func (h *ConfigHandler) HandleAddConfigurationGroup(w http.ResponseWriter, r *ht
 	}
 
 	idempotencyKey := r.Header.Get("X-Request-Id")
-
 	if err := h.Service.AddConfigurationGroup(ctx, newGroup, idempotencyKey); err != nil {
-		span.SetAttributes(attribute.String("error.message", "Group creation failed"))
 		http.Error(w, "Group creation failed: "+err.Error(), http.StatusConflict)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(newGroup)
+	_ = json.NewEncoder(w).Encode(newGroup)
+}
+
+// HandleGetConfigurationGroup godoc
+// @Summary Vraća grupu konfiguracija po imenu i verziji
+// @Description Vraća specifičnu grupu konfiguracija.
+// @Tags configuration_groups
+// @Produce json
+// @Param name query string true "Ime grupe"
+// @Param version query string true "Verzija grupe"
+// @Success 200 {object} model.ConfigurationGroup
+// @Failure 400 {string} string "Missing query parameters"
+// @Failure 404 {string} string "Configuration group not found"
+// @Router /configgroups [get]
+func (h *ConfigHandler) HandleGetConfigurationGroup(w http.ResponseWriter, r *http.Request) {
+	ctx, span := tracer.Start(r.Context(), "HandleGetConfigurationGroup")
+	defer span.End()
+
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	name := r.URL.Query().Get("name")
+	version := r.URL.Query().Get("version")
+
+	if name == "" || version == "" {
+		http.Error(w, "Query parameters 'name' and 'version' are required.", http.StatusBadRequest)
+		return
+	}
+
+	group, err := h.Service.GetConfigurationGroup(ctx, name, version)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			http.Error(w, "Configuration group not found.", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Internal server error.", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(group)
 }
 
 // HandleUpdateConfigurationGroup godoc
@@ -341,7 +323,6 @@ func (h *ConfigHandler) HandleUpdateConfigurationGroup(w http.ResponseWriter, r 
 
 	var req model.CreateGroupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		span.SetAttributes(attribute.String("error.message", "Invalid request body"))
 		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -353,11 +334,8 @@ func (h *ConfigHandler) HandleUpdateConfigurationGroup(w http.ResponseWriter, r 
 	}
 
 	idempotencyKey := r.Header.Get("X-Request-Id")
-
 	finalGroup, err := h.Service.UpdateConfigurationGroup(ctx, groupToUpdate, idempotencyKey)
-
 	if err != nil {
-		span.SetAttributes(attribute.String("error.message", "Update failed"))
 		if strings.Contains(err.Error(), "not found") {
 			http.Error(w, "Configuration group not found for update.", http.StatusNotFound)
 			return
@@ -367,8 +345,7 @@ func (h *ConfigHandler) HandleUpdateConfigurationGroup(w http.ResponseWriter, r 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(finalGroup)
+	_ = json.NewEncoder(w).Encode(finalGroup)
 }
 
 // HandleDeleteConfigurationGroup godoc
@@ -395,20 +372,16 @@ func (h *ConfigHandler) HandleDeleteConfigurationGroup(w http.ResponseWriter, r 
 	version := r.URL.Query().Get("version")
 
 	if name == "" || version == "" {
-		span.SetAttributes(attribute.String("error.message", "Missing query params"))
 		http.Error(w, "Query parameters 'name' and 'version' are required.", http.StatusBadRequest)
 		return
 	}
 
 	err := h.Service.DeleteConfigurationGroup(ctx, name, version)
-
 	if err != nil {
-		span.SetAttributes(attribute.String("error.message", "Delete failed"))
 		if strings.Contains(err.Error(), "not found") {
 			http.Error(w, "Configuration group not found for deletion.", http.StatusNotFound)
 			return
 		}
-		log.Printf("Error deleting group %s/%s: %v", name, version, err)
 		http.Error(w, "Internal server error during deletion.", http.StatusInternalServerError)
 		return
 	}
@@ -445,32 +418,27 @@ func (h *ConfigHandler) HandleGetGroupConfigsByLabels(w http.ResponseWriter, r *
 	labelsRaw := r.URL.Query().Get("labels")
 
 	if name == "" || version == "" {
-		span.SetAttributes(attribute.String("error.message", "Missing query params"))
 		http.Error(w, "Query parameters 'name' and 'version' are required.", http.StatusBadRequest)
 		return
 	}
 
 	want, err := labels.Parse(labelsRaw)
 	if err != nil {
-		span.SetAttributes(attribute.String("error.message", "Invalid labels query"))
 		http.Error(w, "Invalid 'labels' query: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	list, err := h.Service.FilterConfigsByLabels(ctx, name, version, want)
 	if err != nil {
-		span.SetAttributes(attribute.String("error.message", "Filtering failed"))
 		if strings.Contains(err.Error(), "not found") {
 			http.Error(w, "Configuration Group not found.", http.StatusNotFound)
 			return
 		}
-		log.Printf("Error filtering configs by labels for %s/%s: %v", name, version, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(list)
 }
 
@@ -501,37 +469,31 @@ func (h *ConfigHandler) HandleDeleteGroupConfigsByLabels(w http.ResponseWriter, 
 	labelsRaw := r.URL.Query().Get("labels")
 
 	if name == "" || version == "" {
-		span.SetAttributes(attribute.String("error.message", "Missing query params"))
 		http.Error(w, "Query parameters 'name' and 'version' are required.", http.StatusBadRequest)
 		return
 	}
 	if labelsRaw == "" {
-		span.SetAttributes(attribute.String("error.message", "Missing labels query"))
 		http.Error(w, "Query parameter 'labels' is required (format: k:v;k2:v2).", http.StatusBadRequest)
 		return
 	}
 
 	want, err := labels.Parse(labelsRaw)
 	if err != nil || len(want) == 0 {
-		span.SetAttributes(attribute.String("error.message", "Invalid labels query"))
 		http.Error(w, "Invalid 'labels' query: expected k:v;k2:v2", http.StatusBadRequest)
 		return
 	}
 
 	deleted, err := h.Service.DeleteConfigsByLabels(ctx, name, version, want)
 	if err != nil {
-		span.SetAttributes(attribute.String("error.message", "Deletion failed"))
 		if strings.Contains(err.Error(), "not found") {
 			http.Error(w, "Configuration Group not found.", http.StatusNotFound)
 			return
 		}
-		log.Printf("Error deleting configs by labels for %s/%s: %v", name, version, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	resp := map[string]int{"deleted": deleted}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
 }
