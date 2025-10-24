@@ -53,14 +53,14 @@ func (m *MockService) AddConfiguration(ctx context.Context, config model.Configu
 	return nil
 }
 
-func (m *MockService) GetConfiguration(ctx context.Context, name, version string) (model.Configuration, error) {
-	key := m.makeConfigKey(name, version)
-	config, exists := m.configs[key]
-	if !exists {
-		return model.Configuration{}, errors.New("configuration not found")
-	}
-	return config, nil
-}
+// func (m *MockService) GetConfiguration(ctx context.Context, name, version string) (model.Configuration, error) {
+// 	key := m.makeConfigKey(name, version)
+// 	config, exists := m.configs[key]
+// 	if !exists {
+// 		return model.Configuration{}, errors.New("configuration not found")
+// 	}
+// 	return config, nil
+// }
 
 func (m *MockService) UpdateConfiguration(ctx context.Context, config model.Configuration, idempotencyKey string) (model.Configuration, error) {
 	key := m.makeConfigKey(config.Name, config.Version)
@@ -78,14 +78,14 @@ func (m *MockService) UpdateConfiguration(ctx context.Context, config model.Conf
 	return config, nil
 }
 
-func (m *MockService) DeleteConfiguration(ctx context.Context, name, version string) error {
-	key := m.makeConfigKey(name, version)
-	if _, exists := m.configs[key]; !exists {
-		return errors.New("configuration not found")
-	}
-	delete(m.configs, key)
-	return nil
-}
+// func (m *MockService) DeleteConfiguration(ctx context.Context, name, version string) error {
+// 	key := m.makeConfigKey(name, version)
+// 	if _, exists := m.configs[key]; !exists {
+// 		return errors.New("configuration not found")
+// 	}
+// 	delete(m.configs, key)
+// 	return nil
+// }
 
 func (m *MockService) AddConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) error {
 	key := m.makeGroupKey(group.Name, group.Version)
