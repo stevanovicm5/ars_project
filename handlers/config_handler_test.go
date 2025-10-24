@@ -11,9 +11,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/mux" // MORAMO KORISTITI MUX ZA PRAVILNU EMULACIJU VARS
 )
 
 // MockService for testing handlers
+// ISPRAVLJENO: Dodate su sve metode da bi se implementirao interfejs services.Service.
 type MockService struct {
 	configs map[string]model.Configuration
 	groups  map[string]model.ConfigurationGroup
@@ -38,12 +40,10 @@ func (m *MockService) CheckIdempotencyKey(ctx context.Context, key string) (bool
 	return false, nil
 }
 
-// ISPRAVLJENO: Ukloni povratnu vrednost
 func (m *MockService) SaveIdempotencyKey(ctx context.Context, key string) {
 	// Nema return statement
 }
 
-// Ostale metode ostaju iste...
 func (m *MockService) AddConfiguration(ctx context.Context, config model.Configuration, idempotencyKey string) error {
 	key := m.makeConfigKey(config.Name, config.Version)
 	if _, exists := m.configs[key]; exists {
@@ -53,14 +53,15 @@ func (m *MockService) AddConfiguration(ctx context.Context, config model.Configu
 	return nil
 }
 
-// func (m *MockService) GetConfiguration(ctx context.Context, name, version string) (model.Configuration, error) {
-// 	key := m.makeConfigKey(name, version)
-// 	config, exists := m.configs[key]
-// 	if !exists {
-// 		return model.Configuration{}, errors.New("configuration not found")
-// 	}
-// 	return config, nil
-// }
+// ISPRAVLJENA METODA
+func (m *MockService) GetConfiguration(ctx context.Context, name, version string) (model.Configuration, error) {
+	key := m.makeConfigKey(name, version)
+	config, exists := m.configs[key]
+	if !exists {
+		return model.Configuration{}, errors.New("configuration not found")
+	}
+	return config, nil
+}
 
 func (m *MockService) UpdateConfiguration(ctx context.Context, config model.Configuration, idempotencyKey string) (model.Configuration, error) {
 	key := m.makeConfigKey(config.Name, config.Version)
@@ -78,14 +79,15 @@ func (m *MockService) UpdateConfiguration(ctx context.Context, config model.Conf
 	return config, nil
 }
 
-// func (m *MockService) DeleteConfiguration(ctx context.Context, name, version string) error {
-// 	key := m.makeConfigKey(name, version)
-// 	if _, exists := m.configs[key]; !exists {
-// 		return errors.New("configuration not found")
-// 	}
-// 	delete(m.configs, key)
-// 	return nil
-// }
+// ISPRAVLJENA METODA
+func (m *MockService) DeleteConfiguration(ctx context.Context, name, version string) error {
+	key := m.makeConfigKey(name, version)
+	if _, exists := m.configs[key]; !exists {
+		return errors.New("configuration not found")
+	}
+	delete(m.configs, key)
+	return nil
+}
 
 func (m *MockService) AddConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) error {
 	key := m.makeGroupKey(group.Name, group.Version)
@@ -135,14 +137,19 @@ func (m *MockService) FilterConfigsByLabels(ctx context.Context, name, version s
 	if err != nil {
 		return nil, err
 	}
+	// Mock implementacija za testiranje, uvek vraća sve konfiguracije
 	return group.Configurations, nil
 }
 
 func (m *MockService) DeleteConfigsByLabels(ctx context.Context, name, version string, want map[string]string) (int, error) {
+	// Mock implementacija, vraća 0 obrisanih
 	return 0, nil
 }
 
+// -------------------------------------------------------------------
 // Tests
+// -------------------------------------------------------------------
+
 func TestConfigHandler_AddConfiguration(t *testing.T) {
 	mockService := NewMockService()
 	handler := NewConfigHandler(mockService)
@@ -194,6 +201,7 @@ func TestConfigHandler_AddConfiguration_BadRequest(t *testing.T) {
 	}
 }
 
+// ISPRAVLJENI TEST ZA GET: Koristi mux.Vars
 func TestConfigHandler_GetConfiguration(t *testing.T) {
 	mockService := NewMockService()
 	handler := NewConfigHandler(mockService)
@@ -206,14 +214,20 @@ func TestConfigHandler_GetConfiguration(t *testing.T) {
 	}
 	mockService.configs["get-test:v1.0.0"] = config
 
-	// ISPRAVLJENO: Koristi query parametre umesto path parametara
-	req := httptest.NewRequest("GET", "/configurations?name=get-test&version=v1.0.0", nil)
-	rr := httptest.NewRecorder()
+	// Kreira se HTTP zahtev za putanju /configurations/get-test/v1.0.0
+	req := httptest.NewRequest("GET", "/configurations/get-test/v1.0.0", nil)
 
+	// Dodaje Mux varijable da bi Mux.Vars() radio u handleru
+	req = mux.SetURLVars(req, map[string]string{
+		"name":    "get-test",
+		"version": "v1.0.0",
+	})
+
+	rr := httptest.NewRecorder()
 	handler.HandleGetConfiguration(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", rr.Code)
+		t.Fatalf("Expected status 200, got %d. Body: %s", rr.Code, rr.Body.String())
 	}
 
 	var response model.Configuration
@@ -227,23 +241,33 @@ func TestConfigHandler_GetConfiguration(t *testing.T) {
 	}
 }
 
+// ISPRAVLJENI TEST ZA MISSING PARAMS: Koristi mux.Vars
 func TestConfigHandler_GetConfiguration_MissingParams(t *testing.T) {
 	mockService := NewMockService()
 	handler := NewConfigHandler(mockService)
 
-	// ISPRAVLJENO: Testiraj sa praznim query parametrima
-	req := httptest.NewRequest("GET", "/configurations?name=&version=v1.0.0", nil)
-	rr := httptest.NewRecorder()
-	handler.HandleGetConfiguration(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("Expected status 400 for missing name, got %d", rr.Code)
+	// Test 1: Nedostaje "version" (emulira se rutingom)
+	req1 := httptest.NewRequest("GET", "/configurations/test-name/", nil)
+	req1 = mux.SetURLVars(req1, map[string]string{
+		"name": "test-name",
+		// "version" fali ili je prazan
+	})
+	rr1 := httptest.NewRecorder()
+	handler.HandleGetConfiguration(rr1, req1)
+	if rr1.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400 for missing version, got %d", rr1.Code)
 	}
 
-	req2 := httptest.NewRequest("GET", "/configurations?name=test&version=", nil)
+	// Test 2: Nedostaje "name"
+	req2 := httptest.NewRequest("GET", "/configurations//v1.0.0", nil)
+	req2 = mux.SetURLVars(req2, map[string]string{
+		"version": "v1.0.0",
+		// "name" fali ili je prazan
+	})
 	rr2 := httptest.NewRecorder()
 	handler.HandleGetConfiguration(rr2, req2)
 	if rr2.Code != http.StatusBadRequest {
-		t.Errorf("Expected status 400 for missing version, got %d", rr2.Code)
+		t.Errorf("Expected status 400 for missing name, got %d", rr2.Code)
 	}
 }
 
@@ -268,7 +292,6 @@ func TestConfigHandler_UpdateConfiguration(t *testing.T) {
 
 	body, _ := json.Marshal(updateReq)
 
-	// ISPRAVLJENO: PUT zahtev na osnovni endpoint
 	req := httptest.NewRequest("PUT", "/configurations", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Request-Id", "update-uuid")
@@ -296,6 +319,7 @@ func TestConfigHandler_UpdateConfiguration(t *testing.T) {
 	}
 }
 
+// ISPRAVLJENI TEST ZA DELETE: Koristi mux.Vars
 func TestConfigHandler_DeleteConfiguration(t *testing.T) {
 	mockService := NewMockService()
 	handler := NewConfigHandler(mockService)
@@ -308,14 +332,25 @@ func TestConfigHandler_DeleteConfiguration(t *testing.T) {
 	}
 	mockService.configs["delete-test:v1.0.0"] = config
 
-	// ISPRAVLJENO: Koristi query parametre
-	req := httptest.NewRequest("DELETE", "/configurations?name=delete-test&version=v1.0.0", nil)
-	rr := httptest.NewRecorder()
+	// Kreira se HTTP zahtev
+	req := httptest.NewRequest("DELETE", "/configurations/delete-test/v1.0.0", nil)
 
+	// Dodaje Mux varijable
+	req = mux.SetURLVars(req, map[string]string{
+		"name":    "delete-test",
+		"version": "v1.0.0",
+	})
+
+	rr := httptest.NewRecorder()
 	handler.HandleDeleteConfiguration(rr, req)
 
 	if rr.Code != http.StatusNoContent {
-		t.Errorf("Expected status 204, got %d", rr.Code)
+		t.Fatalf("Expected status 204, got %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	// Provera da li je obrisano
+	if _, exists := mockService.configs["delete-test:v1.0.0"]; exists {
+		t.Error("Configuration was not deleted from mock service")
 	}
 }
 
@@ -323,8 +358,15 @@ func TestConfigHandler_WrongMethod(t *testing.T) {
 	mockService := NewMockService()
 	handler := NewConfigHandler(mockService)
 
-	// ISPRAVLJENO: Testiraj sa query parametrima
-	req := httptest.NewRequest("POST", "/configurations?name=test&version=v1.0.0", nil)
+	// Testiramo GET endpoint sa POST metodom
+	req := httptest.NewRequest("POST", "/configurations/test/v1.0.0", nil)
+
+	// Moramo dodati i Mux Vars za emulaciju
+	req = mux.SetURLVars(req, map[string]string{
+		"name":    "test",
+		"version": "v1.0.0",
+	})
+
 	rr := httptest.NewRecorder()
 
 	handler.HandleGetConfiguration(rr, req)
@@ -333,6 +375,10 @@ func TestConfigHandler_WrongMethod(t *testing.T) {
 		t.Errorf("Expected status 405 for wrong method, got %d", rr.Code)
 	}
 }
+
+// -------------------------------------------------------------------
+// Group Tests
+// -------------------------------------------------------------------
 
 func TestConfigHandler_AddConfigurationGroup(t *testing.T) {
 	mockService := NewMockService()
@@ -399,7 +445,6 @@ func TestConfigHandler_UpdateConfigurationGroup(t *testing.T) {
 
 	body, _ := json.Marshal(updateReq)
 
-	// ISPRAVLJENO: PUT zahtev na osnovni endpoint
 	req := httptest.NewRequest("PUT", "/configgroups", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Request-Id", "group-update-uuid")
@@ -424,5 +469,71 @@ func TestConfigHandler_UpdateConfigurationGroup(t *testing.T) {
 
 	if len(response.Configurations) != 1 || response.Configurations[0].Params[0].Key != "new" {
 		t.Errorf("Handler did not return the updated group. Got configs: %+v", response.Configurations)
+	}
+}
+
+// ISPRAVLJENI TEST ZA GET GROUP: Koristi mux.Vars
+func TestConfigHandler_GetConfigurationGroup(t *testing.T) {
+	mockService := NewMockService()
+	handler := NewConfigHandler(mockService)
+
+	group := model.ConfigurationGroup{
+		ID:      uuid.New(),
+		Name:    "get-group-test",
+		Version: "v1.0.0",
+	}
+	mockService.groups["get-group-test:v1.0.0"] = group
+
+	req := httptest.NewRequest("GET", "/configgroups/get-group-test/v1.0.0", nil)
+	req = mux.SetURLVars(req, map[string]string{
+		"name":    "get-group-test",
+		"version": "v1.0.0",
+	})
+	rr := httptest.NewRecorder()
+
+	handler.HandleGetConfigurationGroup(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	var response model.ConfigurationGroup
+	err := json.NewDecoder(rr.Body).Decode(&response)
+	if err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if response.Name != "get-group-test" {
+		t.Errorf("Expected name 'get-group-test', got '%s'", response.Name)
+	}
+}
+
+// ISPRAVLJENI TEST ZA DELETE GROUP: Koristi mux.Vars
+func TestConfigHandler_DeleteConfigurationGroup(t *testing.T) {
+	mockService := NewMockService()
+	handler := NewConfigHandler(mockService)
+
+	group := model.ConfigurationGroup{
+		ID:      uuid.New(),
+		Name:    "delete-group-test",
+		Version: "v1.0.0",
+	}
+	mockService.groups["delete-group-test:v1.0.0"] = group
+
+	req := httptest.NewRequest("DELETE", "/configgroups/delete-group-test/v1.0.0", nil)
+	req = mux.SetURLVars(req, map[string]string{
+		"name":    "delete-group-test",
+		"version": "v1.0.0",
+	})
+	rr := httptest.NewRecorder()
+
+	handler.HandleDeleteConfigurationGroup(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("Expected status 204, got %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	if _, exists := mockService.groups["delete-group-test:v1.0.0"]; exists {
+		t.Error("Configuration group was not deleted from mock service")
 	}
 }
