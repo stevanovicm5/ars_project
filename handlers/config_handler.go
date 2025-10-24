@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/mux"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -34,8 +35,8 @@ var tracer = otel.Tracer("config-service-handler-tracer")
 // @Tags configurations
 // @Accept json
 // @Produce json
-// @Param  X-Request-Id header string false "Idempotency Key (UUID/jedinstveni ID)"
-// @Param  config body model.CreateConfigurationRequest true "Telo konfiguracije"
+// @Param X-Request-Id header string false "Idempotency Key (UUID/jedinstveni ID)"
+// @Param config body model.CreateConfigurationRequest true "Telo konfiguracije"
 // @Success 201 {object} model.Configuration
 // @Failure 400 {string} string "Invalid request body"
 // @Failure 409 {string} string "Conflict (već postoji)"
@@ -82,12 +83,12 @@ func (h *ConfigHandler) HandleAddConfiguration(w http.ResponseWriter, r *http.Re
 // @Description Vraća specifičnu konfiguraciju.
 // @Tags configurations
 // @Produce json
-// @Param name query string true "Ime konfiguracije"
-// @Param version query string true "Verzija konfiguracije"
+// @Param name path string true "Ime konfiguracije"
+// @Param version path string true "Verzija konfiguracije"
 // @Success 200 {object} model.Configuration
-// @Failure 400 {string} string "Missing query parameters"
+// @Failure 400 {string} string "Missing path parameters"
 // @Failure 404 {string} string "Configuration not found"
-// @Router /configurations [get]
+// @Router /configurations/{name}/{version} [get]
 func (h *ConfigHandler) HandleGetConfiguration(w http.ResponseWriter, r *http.Request) {
 	ctx, span := tracer.Start(r.Context(), "HandleGetConfiguration")
 	defer span.End()
@@ -97,11 +98,12 @@ func (h *ConfigHandler) HandleGetConfiguration(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	name := r.URL.Query().Get("name")
-	version := r.URL.Query().Get("version")
+	vars := mux.Vars(r)
+	name := vars["name"]
+	version := vars["version"]
 
 	if name == "" || version == "" {
-		http.Error(w, "Query parameters 'name' and 'version' are required.", http.StatusBadRequest)
+		http.Error(w, "Path parameters 'name' and 'version' are required.", http.StatusBadRequest)
 		return
 	}
 
@@ -123,8 +125,8 @@ func (h *ConfigHandler) HandleGetConfiguration(w http.ResponseWriter, r *http.Re
 // @Tags configurations
 // @Accept json
 // @Produce json
-// @Param  X-Request-Id header string false "Idempotency Key (UUID/jedinstveni ID)"
-// @Param  config body model.CreateConfigurationRequest true "Ažurirano telo konfiguracije"
+// @Param X-Request-Id header string false "Idempotency Key (UUID/jedinstveni ID)"
+// @Param config body model.CreateConfigurationRequest true "Ažurirano telo konfiguracije (mora uključiti ime i verziju)"
 // @Success 200 {object} model.Configuration
 // @Failure 400 {string} string "Invalid request body"
 // @Failure 404 {string} string "Configuration not found"
@@ -172,13 +174,13 @@ func (h *ConfigHandler) HandleUpdateConfiguration(w http.ResponseWriter, r *http
 // @Summary Briše konfiguraciju
 // @Description Briše specifičnu konfiguraciju po imenu i verziji.
 // @Tags configurations
-// @Param name query string true "Ime konfiguracije"
-// @Param version query string true "Verzija konfiguracije"
+// @Param name path string true "Ime konfiguracije"
+// @Param version path string true "Verzija konfiguracije"
 // @Success 204 "No Content"
-// @Failure 400 {string} string "Missing query parameters"
+// @Failure 400 {string} string "Missing path parameters"
 // @Failure 404 {string} string "Configuration not found"
 // @Failure 500 {string} string "Internal Server Error"
-// @Router /configurations [delete]
+// @Router /configurations/{name}/{version} [delete]
 func (h *ConfigHandler) HandleDeleteConfiguration(w http.ResponseWriter, r *http.Request) {
 	ctx, span := tracer.Start(r.Context(), "HandleDeleteConfiguration")
 	defer span.End()
@@ -188,11 +190,12 @@ func (h *ConfigHandler) HandleDeleteConfiguration(w http.ResponseWriter, r *http
 		return
 	}
 
-	name := r.URL.Query().Get("name")
-	version := r.URL.Query().Get("version")
+	vars := mux.Vars(r)
+	name := vars["name"]
+	version := vars["version"]
 
 	if name == "" || version == "" {
-		http.Error(w, "Query parameters 'name' and 'version' are required.", http.StatusBadRequest)
+		http.Error(w, "Path parameters 'name' and 'version' are required.", http.StatusBadRequest)
 		return
 	}
 
@@ -217,8 +220,8 @@ func (h *ConfigHandler) HandleDeleteConfiguration(w http.ResponseWriter, r *http
 // @Tags configuration_groups
 // @Accept json
 // @Produce json
-// @Param  X-Request-Id header string false "Idempotency Key (UUID/jedinstveni ID)"
-// @Param  group body model.CreateGroupRequest true "Telo grupe konfiguracija"
+// @Param X-Request-Id header string false "Idempotency Key (UUID/jedinstveni ID)"
+// @Param group body model.CreateGroupRequest true "Telo grupe konfiguracija"
 // @Success 201 {object} model.ConfigurationGroup
 // @Failure 400 {string} string "Invalid request body"
 // @Failure 409 {string} string "Group creation failed (Conflict)"
@@ -261,12 +264,12 @@ func (h *ConfigHandler) HandleAddConfigurationGroup(w http.ResponseWriter, r *ht
 // @Description Vraća specifičnu grupu konfiguracija.
 // @Tags configuration_groups
 // @Produce json
-// @Param name query string true "Ime grupe"
-// @Param version query string true "Verzija grupe"
+// @Param name path string true "Ime grupe"
+// @Param version path string true "Verzija grupe"
 // @Success 200 {object} model.ConfigurationGroup
-// @Failure 400 {string} string "Missing query parameters"
+// @Failure 400 {string} string "Missing path parameters"
 // @Failure 404 {string} string "Configuration group not found"
-// @Router /configgroups [get]
+// @Router /configgroups/{name}/{version} [get]
 func (h *ConfigHandler) HandleGetConfigurationGroup(w http.ResponseWriter, r *http.Request) {
 	ctx, span := tracer.Start(r.Context(), "HandleGetConfigurationGroup")
 	defer span.End()
@@ -276,11 +279,12 @@ func (h *ConfigHandler) HandleGetConfigurationGroup(w http.ResponseWriter, r *ht
 		return
 	}
 
-	name := r.URL.Query().Get("name")
-	version := r.URL.Query().Get("version")
+	vars := mux.Vars(r)
+	name := vars["name"]
+	version := vars["version"]
 
 	if name == "" || version == "" {
-		http.Error(w, "Query parameters 'name' and 'version' are required.", http.StatusBadRequest)
+		http.Error(w, "Path parameters 'name' and 'version' are required.", http.StatusBadRequest)
 		return
 	}
 
@@ -352,13 +356,13 @@ func (h *ConfigHandler) HandleUpdateConfigurationGroup(w http.ResponseWriter, r 
 // @Summary Briše grupu konfiguracija
 // @Description Briše specifičnu grupu konfiguracija po imenu i verziji.
 // @Tags configuration_groups
-// @Param name query string true "Ime grupe"
-// @Param version query string true "Verzija grupe"
+// @Param name path string true "Ime grupe"
+// @Param version path string true "Verzija grupe"
 // @Success 204 "No Content"
-// @Failure 400 {string} string "Missing query parameters"
+// @Failure 400 {string} string "Missing path parameters"
 // @Failure 404 {string} string "Configuration group not found"
 // @Failure 500 {string} string "Internal Server Error"
-// @Router /configgroups [delete]
+// @Router /configgroups/{name}/{version} [delete]
 func (h *ConfigHandler) HandleDeleteConfigurationGroup(w http.ResponseWriter, r *http.Request) {
 	ctx, span := tracer.Start(r.Context(), "HandleDeleteConfigurationGroup")
 	defer span.End()
@@ -368,11 +372,12 @@ func (h *ConfigHandler) HandleDeleteConfigurationGroup(w http.ResponseWriter, r 
 		return
 	}
 
-	name := r.URL.Query().Get("name")
-	version := r.URL.Query().Get("version")
+	vars := mux.Vars(r)
+	name := vars["name"]
+	version := vars["version"]
 
 	if name == "" || version == "" {
-		http.Error(w, "Query parameters 'name' and 'version' are required.", http.StatusBadRequest)
+		http.Error(w, "Path parameters 'name' and 'version' are required.", http.StatusBadRequest)
 		return
 	}
 
@@ -389,21 +394,19 @@ func (h *ConfigHandler) HandleDeleteConfigurationGroup(w http.ResponseWriter, r 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// --- LABEL-BASED OPERATIONS ---
-
 // HandleGetGroupConfigsByLabels godoc
 // @Summary Filtrira konfiguracije unutar grupe po labelama
 // @Description Vraća listu konfiguracija unutar grupe koje odgovaraju zadatim labelama.
 // @Tags configuration_groups
 // @Produce json
-// @Param name query string true "Ime grupe"
-// @Param version query string true "Verzija grupe"
+// @Param name path string true "Ime grupe"
+// @Param version path string true "Verzija grupe"
 // @Param labels query string true "Labeli (k:v;k2:v2)"
 // @Success 200 {array} model.Configuration "Filtrirana lista konfiguracija"
-// @Failure 400 {string} string "Missing query parameters or invalid labels format"
+// @Failure 400 {string} string "Missing path/query parameters or invalid labels format"
 // @Failure 404 {string} string "Configuration Group not found"
 // @Failure 500 {string} string "Internal Server Error"
-// @Router /configgroups/configurations [get]
+// @Router /configgroups/{name}/{version}/configurations [get]
 func (h *ConfigHandler) HandleGetGroupConfigsByLabels(w http.ResponseWriter, r *http.Request) {
 	ctx, span := tracer.Start(r.Context(), "HandleGetGroupConfigsByLabels")
 	defer span.End()
@@ -413,12 +416,17 @@ func (h *ConfigHandler) HandleGetGroupConfigsByLabels(w http.ResponseWriter, r *
 		return
 	}
 
-	name := r.URL.Query().Get("name")
-	version := r.URL.Query().Get("version")
+	vars := mux.Vars(r)
+	name := vars["name"]
+	version := vars["version"]
 	labelsRaw := r.URL.Query().Get("labels")
 
 	if name == "" || version == "" {
-		http.Error(w, "Query parameters 'name' and 'version' are required.", http.StatusBadRequest)
+		http.Error(w, "Path parameters 'name' and 'version' are required.", http.StatusBadRequest)
+		return
+	}
+	if labelsRaw == "" {
+		http.Error(w, "Query parameter 'labels' is required.", http.StatusBadRequest)
 		return
 	}
 
@@ -447,14 +455,14 @@ func (h *ConfigHandler) HandleGetGroupConfigsByLabels(w http.ResponseWriter, r *
 // @Description Briše konfiguracije unutar grupe koje odgovaraju zadatim labelama. Vraća broj obrisanih.
 // @Tags configuration_groups
 // @Produce json
-// @Param name query string true "Ime grupe"
-// @Param version query string true "Verzija grupe"
+// @Param name path string true "Ime grupe"
+// @Param version path string true "Verzija grupe"
 // @Param labels query string true "Labeli (k:v;k2:v2)"
 // @Success 200 {object} object{deleted=int}
-// @Failure 400 {string} string "Missing query parameters or invalid labels format"
+// @Failure 400 {string} string "Missing path/query parameters or invalid labels format"
 // @Failure 404 {string} string "Configuration Group not found"
 // @Failure 500 {string} string "Internal Server Error"
-// @Router /configgroups/configurations [delete]
+// @Router /configgroups/{name}/{version}/configurations [delete]
 func (h *ConfigHandler) HandleDeleteGroupConfigsByLabels(w http.ResponseWriter, r *http.Request) {
 	ctx, span := tracer.Start(r.Context(), "HandleDeleteGroupConfigsByLabels")
 	defer span.End()
@@ -464,12 +472,13 @@ func (h *ConfigHandler) HandleDeleteGroupConfigsByLabels(w http.ResponseWriter, 
 		return
 	}
 
-	name := r.URL.Query().Get("name")
-	version := r.URL.Query().Get("version")
+	vars := mux.Vars(r)
+	name := vars["name"]
+	version := vars["version"]
 	labelsRaw := r.URL.Query().Get("labels")
 
 	if name == "" || version == "" {
-		http.Error(w, "Query parameters 'name' and 'version' are required.", http.StatusBadRequest)
+		http.Error(w, "Path parameters 'name' and 'version' are required.", http.StatusBadRequest)
 		return
 	}
 	if labelsRaw == "" {
