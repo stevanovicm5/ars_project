@@ -38,8 +38,12 @@ func (m *MockService) CheckIdempotencyKey(ctx context.Context, key string) (bool
 	return false, nil
 }
 
-func (m *MockService) SaveIdempotencyKey(ctx context.Context, key string) {}
+// ISPRAVLJENO: Ukloni povratnu vrednost
+func (m *MockService) SaveIdempotencyKey(ctx context.Context, key string) {
+	// Nema return statement
+}
 
+// Ostale metode ostaju iste...
 func (m *MockService) AddConfiguration(ctx context.Context, config model.Configuration, idempotencyKey string) error {
 	key := m.makeConfigKey(config.Name, config.Version)
 	if _, exists := m.configs[key]; exists {
@@ -71,7 +75,6 @@ func (m *MockService) UpdateConfiguration(ctx context.Context, config model.Conf
 	}
 
 	m.configs[key] = config
-
 	return config, nil
 }
 
@@ -84,15 +87,6 @@ func (m *MockService) DeleteConfiguration(ctx context.Context, name, version str
 	return nil
 }
 
-func (m *MockService) GetConfigurationGroup(ctx context.Context, name, version string) (model.ConfigurationGroup, error) {
-	key := m.makeGroupKey(name, version)
-	group, exists := m.groups[key]
-	if !exists {
-		return model.ConfigurationGroup{}, errors.New("configuration group not found")
-	}
-	return group, nil
-}
-
 func (m *MockService) AddConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) error {
 	key := m.makeGroupKey(group.Name, group.Version)
 	if _, exists := m.groups[key]; exists {
@@ -100,6 +94,15 @@ func (m *MockService) AddConfigurationGroup(ctx context.Context, group model.Con
 	}
 	m.groups[key] = group
 	return nil
+}
+
+func (m *MockService) GetConfigurationGroup(ctx context.Context, name, version string) (model.ConfigurationGroup, error) {
+	key := m.makeGroupKey(name, version)
+	group, exists := m.groups[key]
+	if !exists {
+		return model.ConfigurationGroup{}, errors.New("configuration group not found")
+	}
+	return group, nil
 }
 
 func (m *MockService) UpdateConfigurationGroup(ctx context.Context, group model.ConfigurationGroup, idempotencyKey string) (model.ConfigurationGroup, error) {
@@ -203,7 +206,8 @@ func TestConfigHandler_GetConfiguration(t *testing.T) {
 	}
 	mockService.configs["get-test:v1.0.0"] = config
 
-	req := httptest.NewRequest("GET", "/configurations/get-test/v1.0.0", nil)
+	// ISPRAVLJENO: Koristi query parametre umesto path parametara
+	req := httptest.NewRequest("GET", "/configurations?name=get-test&version=v1.0.0", nil)
 	rr := httptest.NewRecorder()
 
 	handler.HandleGetConfiguration(rr, req)
@@ -227,14 +231,15 @@ func TestConfigHandler_GetConfiguration_MissingParams(t *testing.T) {
 	mockService := NewMockService()
 	handler := NewConfigHandler(mockService)
 
-	req := httptest.NewRequest("GET", "/configurations//v1.0.0", nil)
+	// ISPRAVLJENO: Testiraj sa praznim query parametrima
+	req := httptest.NewRequest("GET", "/configurations?name=&version=v1.0.0", nil)
 	rr := httptest.NewRecorder()
 	handler.HandleGetConfiguration(rr, req)
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("Expected status 400 for missing name, got %d", rr.Code)
 	}
 
-	req2 := httptest.NewRequest("GET", "/configurations/test/", nil)
+	req2 := httptest.NewRequest("GET", "/configurations?name=test&version=", nil)
 	rr2 := httptest.NewRecorder()
 	handler.HandleGetConfiguration(rr2, req2)
 	if rr2.Code != http.StatusBadRequest {
@@ -263,7 +268,8 @@ func TestConfigHandler_UpdateConfiguration(t *testing.T) {
 
 	body, _ := json.Marshal(updateReq)
 
-	req := httptest.NewRequest("PUT", "/configurations/update-test/v1.0.0", bytes.NewReader(body))
+	// ISPRAVLJENO: PUT zahtev na osnovni endpoint
+	req := httptest.NewRequest("PUT", "/configurations", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Request-Id", "update-uuid")
 
@@ -302,7 +308,8 @@ func TestConfigHandler_DeleteConfiguration(t *testing.T) {
 	}
 	mockService.configs["delete-test:v1.0.0"] = config
 
-	req := httptest.NewRequest("DELETE", "/configurations/delete-test/v1.0.0", nil)
+	// ISPRAVLJENO: Koristi query parametre
+	req := httptest.NewRequest("DELETE", "/configurations?name=delete-test&version=v1.0.0", nil)
 	rr := httptest.NewRecorder()
 
 	handler.HandleDeleteConfiguration(rr, req)
@@ -316,7 +323,8 @@ func TestConfigHandler_WrongMethod(t *testing.T) {
 	mockService := NewMockService()
 	handler := NewConfigHandler(mockService)
 
-	req := httptest.NewRequest("POST", "/configurations/test/v1.0.0", nil)
+	// ISPRAVLJENO: Testiraj sa query parametrima
+	req := httptest.NewRequest("POST", "/configurations?name=test&version=v1.0.0", nil)
 	rr := httptest.NewRecorder()
 
 	handler.HandleGetConfiguration(rr, req)
@@ -391,7 +399,8 @@ func TestConfigHandler_UpdateConfigurationGroup(t *testing.T) {
 
 	body, _ := json.Marshal(updateReq)
 
-	req := httptest.NewRequest("PUT", "/configgroups/update-group-test/v1.0.0", bytes.NewReader(body))
+	// ISPRAVLJENO: PUT zahtev na osnovni endpoint
+	req := httptest.NewRequest("PUT", "/configgroups", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Request-Id", "group-update-uuid")
 
